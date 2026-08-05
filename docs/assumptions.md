@@ -1,92 +1,144 @@
 # Assumptions, Open Questions, and MVP Risk Register
 
-Date: 2026-08-05  
-Phase: 0 baseline
+Date: 2026-08-05
+Phase: 0 revision baseline
+Status: Phase 0 revision complete; Phase 1 remains blocked until user approval.
 
 ## Locked Principles
 
-These are not assumptions and should not be weakened during MVP delivery:
+These are not assumptions and must not be weakened during MVP delivery:
 
 - AI/static extractor only creates `candidate`.
 - Only reviewer can verify.
-- Verified statement requires valid evidence.
+- Every `BusinessStatement` requires at least one evidence reference.
 - Verified statement changes require revision and lineage.
 - No cross-customer semantic learning.
 - No best-practice normalization.
 - No source upload execution.
 - No code translator, BIR runtime, graph database, or microservices in MVP.
 - No behavioral equivalence claim.
+- Phase 1 must include mandatory Playwright E2E for login -> create project -> project appears in list.
 
 ## Baseline Assumptions From Business Analysis
 
 | ID | Assumption | Status |
 |---|---|---|
 | ASM-001 | Source package is primarily text. | Accepted for MVP |
-| ASM-002 | Users have legal rights to upload and analyze source. | Accepted, should be visible in admin/project policy later |
+| ASM-002 | Users have legal rights to upload and analyze source. | Accepted; should be visible in admin/project policy later |
 | ASM-003 | At least one reviewer understands code or business context. | Accepted |
 | ASM-004 | MVP runs in a controlled environment. | Accepted |
 | ASM-005 | Concurrent user count is low. | Accepted |
 | ASM-006 | Demo project does not use sensitive production data. | Accepted |
-| ASM-007 | One AI provider or mock adapter is sufficient for MVP. | Accepted |
+| ASM-007 | One AI provider or mock adapter is sufficient for MVP. | Refined: mock adapter is mandatory; real provider is optional stretch scope |
 | ASM-008 | MVP proves workflow, not a complete legacy parser. | Accepted |
 
-## New Phase 0 Assumptions To Lock
+## Phase 0 Decisions Locked Before Phase 1
 
-| ID | Assumption | Reason | Decision needed |
+| ID | Decision | Status | Phase 1 impact |
 |---|---|---|---|
-| ASM-009 | Use Python 3.12 via `py -3.12`, not the default Python 3.13, for backend tooling. | Handoff requires Python 3.12 and local 3.12 is available. | Lock in Phase 1 tooling. |
-| ASM-010 | Initialize Git in `D:\BIR` during Phase 0. | Workspace is not currently a Git repository, but phase commits are required. | Proceed unless user prefers external repo initialization. |
-| ASM-011 | Use Docker Compose as the authoritative local runtime for PostgreSQL and Redis. | Docker and Compose are installed and required by SRS. | Lock in Phase 1. |
-| ASM-012 | Use HTTP-only secure session cookie for MVP auth rather than bearer JWT. | SRS allows cookie or JWT; cookie reduces token exposure in browser UI. | Confirm before hardening session behavior. |
-| ASM-013 | Seed local admin/reviewer users through controlled dev seed, not committed secrets. | MVP needs login before user-management UI exists. | Define seed mechanism in Phase 1. |
-| ASM-014 | Store uploaded artifacts under generated IDs/content-addressed paths, never raw user filenames. | Required for storage isolation and path safety. | Lock in Phase 2. |
-| ASM-015 | Unsupported/binary files produce ingest warnings and no artifact content view. | SRS says skip unsupported binary with warning. | Define exact API status codes in Phase 2. |
-| ASM-016 | Real AI provider implementation is deferred until mock adapter tests pass. | Handoff requires mock first; SRS allows mock or provider. | Lock Phase 5 entry criteria. |
-| ASM-017 | UI text can be English-first with domain terms, unless Vietnamese UI is requested before Phase 1. | SRS allows Vietnamese/English basic but does not define copy requirements. | Needs product decision. |
-| ASM-018 | Physical project deletion is not exposed in MVP UI. | SRS says admin deletion mechanism exists but not in UI until controlled enough. | Define whether backend-only admin endpoint is needed. |
+| DEC-001 | Use Python 3.12 via `py -3.12`, not default Python 3.13, for backend tooling. | Accepted | Backend scaffold must target Python 3.12. |
+| DEC-002 | Git was initialized in `D:\BIR` during Phase 0. | Accepted | Per-phase commits are mandatory. |
+| DEC-003 | Use Docker Compose as the authoritative local runtime for PostgreSQL and Redis. | Accepted | Phase 1 compose stack must include PostgreSQL 16 and Redis. |
+| DEC-004 | Use opaque server-side sessions with HTTP-only cookies, not browser JWT. | Accepted in ADR-002 | Phase 1 auth/session implementation is locked. |
+| DEC-005 | Use `SameSite=Lax`, production `Secure=true`, local `Secure=false` allowed, and CSRF tokens for state-changing requests. | Accepted in ADR-002 | Phase 1 security tests must cover cookie flags and CSRF. |
+| DEC-006 | Store sessions server-side in PostgreSQL or Redis and invalidate them server-side on logout. | Accepted in ADR-002 | Phase 1 must include session storage and invalidation tests. |
+| DEC-007 | Development seed user exists only when `APP_ENV=development`; seed password comes from environment. | Accepted in ADR-002 | No hardcoded seed password may be committed. |
+| DEC-008 | Rate limit login by IP and account identifier hash. | Accepted in ADR-002 | Phase 1 auth tests must include rate-limit coverage. |
+| DEC-009 | Project creation always starts in `draft`; allowed transitions are locked in `implementation_plan.md`. | Accepted | Phase 1 project CRUD must use domain/application transition rules. |
+| DEC-010 | `PATCH /projects/{id}` cannot change `status` arbitrarily. | Accepted | Status changes must use explicit service commands. |
+| DEC-011 | Archive is irreversible in MVP; archived projects are read-only. | Accepted | No unarchive flow in Phase 1. |
+| DEC-012 | Uploading new source after `export_ready` moves the project to `ingesting`, then `ready_for_analysis` after ingestion. | Accepted | Prior exports remain immutable snapshots; current readiness is revoked. |
+| DEC-013 | MVP UI is English-first; localization is outside Phase 1. | Accepted | Phase 1 UI copy can be English. |
+| DEC-014 | Physical project deletion is outside MVP; no delete project API or UI. | Accepted | Phase 1 implements archive only. |
+| DEC-015 | Mock AI adapter is mandatory; real provider is optional stretch scope after mock tests pass. | Accepted | Phase 5 can pass with mock adapter if boundary tests pass. |
+| DEC-016 | Python and Node dependencies must be locked; linting/type checks are CI gates once tooling exists; committed/applied migrations are not edited in place. | Accepted | Phase 1 must commit lock files and migration discipline. |
 
 ## Requirement Conflicts Or Tensions
 
-| ID | Issue | Why it matters | Proposed Phase 0 position |
+| ID | Issue | Locked Phase 0 resolution | Blocking Phase 1? |
 |---|---|---|---|
-| CLAR-001 | SRS says every candidate statement must link to at least one evidence range, while BA says candidate without evidence can be saved as `unknown_behavior` until evidence or approved justification exists. | A universal evidence requirement conflicts with an unknown-behavior workflow. | Treat normal extracted statements as requiring evidence. Allow `unknown_behavior` only as an uncertainty record that cannot be verified without evidence or explicit approved justification. |
-| CLAR-002 | Review workflow mentions Technical review and Business review, but MVP role model has a single `reviewer` role and a single statement state machine. | Verification authority and audit semantics could become ambiguous. | Use one `reviewer` role in Phase 1/4, but include `reviewer_type` or decision metadata for technical/business review context. |
-| CLAR-003 | `merge_candidates` is allowed in UC-07, while no auto-merge and preserve contradiction are mandatory principles. | Manual merge can accidentally erase scope/evidence differences. | Only manual reviewer/analyst-assisted merge with explicit lineage and no cross-scope auto-merge; keep conflicts first-class. |
-| CLAR-004 | SRS says one behavioral test per verified rule, while BA export readiness allows documented exceptions for important rules. | Export readiness cannot be deterministic without an exception policy. | Require verified rule coverage to be either linked test or documented exception/warning. |
-| CLAR-005 | "Secure session" is required but cookie vs JWT is undecided. | CSRF, cookie flags, invalidation, and tests differ by mechanism. | Use HTTP-only cookie unless user redirects. |
-| CLAR-006 | Performance target says upload 100 MB with progress, while initial acceptance says ZIP with at least 20 files and quantitative goal says import 100 files. | Phase acceptance could drift between demo and capacity testing. | Treat 20-file ZIP as demo acceptance, 100 text files and 100 MB upload as capacity/performance tests. |
-| CLAR-007 | Project physical deletion is listed as a security requirement but also outside MVP UI until controlled. | Deletion can conflict with immutable artifacts and audit expectations. | Do not expose in UI. Decide later whether backend/admin CLI deletion is required for MVP acceptance. |
-| CLAR-008 | "AI provider thật sau khi mock tests pass" in handoff is stricter than SRS acceptance allowing mock or provider. | Phase 5 scope can expand unexpectedly. | Mock adapter is required; one real provider is optional unless explicitly confirmed as MVP acceptance. |
-| CLAR-009 | Project status transitions are listed, but allowed transitions and rollback rules are incomplete. | Controllers might encode inconsistent transitions. | Define state machine in domain layer in Phase 1 before broad project workflows. |
-| CLAR-010 | `mark_obsolete_candidate` exists as review action, but state machine does not list `obsolete`. | Status model and action model are not aligned. | Represent obsolete as review metadata/resolution until temporal model is introduced; do not add new status without explicit decision. |
+| CLAR-001 | SRS required evidence for candidate statements while BA allowed candidate without evidence as `unknown_behavior`. | Every `BusinessStatement` must have at least one evidence reference. If the analyst knows there is an unresolved area but cannot create a valid evidence-backed statement, use `AnalysisGap` or `UnresolvedQuestion`. `unknown_behavior`, if used as a statement type, must still link to evidence showing unresolved behavior. | No |
+| CLAR-002 | Technical review and business review were described, but MVP has one `reviewer` role. | MVP uses one `reviewer` role. A single valid reviewer decision can verify. Every decision must include `review_context`: `technical`, `business`, or `combined`. Export includes review context. No two-stage approval gate in MVP. | No |
+| CLAR-003 | `merge_candidates` could conflict with no auto-merge and contradiction preservation. | Manual merge creates a new candidate or statement revision. Source candidates are not deleted; they become `superseded`; lineage and evidence links are preserved. Merge is blocked when unresolved scope conflict remains. | No |
+| CLAR-004 | SRS says one behavioral test per verified rule, while BA export readiness allows documented exceptions. | Export readiness requires each verified rule to have either a linked behavioral test or documented exception/warning. | No |
+| CLAR-005 | Secure session mechanism was undecided. | Resolved by ADR-002: opaque server-side session, HTTP-only cookie, CSRF, timeouts, server-side invalidation. | No |
+| CLAR-006 | Demo/capacity targets differ between 20-file ZIP, 100 files, and 100 MB upload. | Treat 20-file ZIP as demo acceptance; 100 text files and 100 MB upload as capacity/performance tests. | No |
+| CLAR-007 | Physical deletion was mentioned but conflicts with immutable artifacts and audit expectations. | Physical deletion is deferred outside MVP. No delete project API or UI. Archive only. | No |
+| CLAR-008 | Real AI provider scope could expand unexpectedly. | Mock adapter is mandatory. Real provider is optional stretch scope; Phase 5 can pass with mock adapter if boundaries are proven. | No |
+| CLAR-009 | Project status transitions and rollback rules were incomplete. | Project state machine is locked in `implementation_plan.md`, including allowed transitions, actors, preconditions, invalid transitions, archive behavior, and source upload after `export_ready`. | No |
+| CLAR-010 | `mark_obsolete_candidate` did not match the statement state machine. | Do not add `obsolete` status in MVP. Store structured `historical_validity` metadata tied to a review decision. Do not delete historically valid statements. | No |
+
+## Evidence, Unknown Behavior, Gaps, and Questions
+
+Official Phase 0 rule:
+
+- A `BusinessStatement` always requires at least one evidence reference.
+- `unknown_behavior` is allowed only when it links to evidence showing a behavior exists but is not yet understood.
+- Examples of valid evidence for `unknown_behavior`: unresolved dynamic call, procedure without source, unclear status code, external program invocation, unreadable binary dependency.
+- If there is no evidence-backed statement to make, record an `AnalysisGap` or `UnresolvedQuestion`.
+- `AnalysisGap` and `UnresolvedQuestion` are not verified business knowledge and cannot be exported as verified statements.
+
+## Review, Merge, and Obsolete Representation
+
+Review:
+
+- One `reviewer` role is used in MVP.
+- `review_context` is required with values `technical`, `business`, or `combined`.
+- One valid reviewer decision is sufficient to verify in MVP.
+- Export must include the review context.
+
+Merge:
+
+- Candidate A plus Candidate B produces new Candidate/Revision C.
+- A and B are not deleted.
+- A and B become `superseded`.
+- C stores lineage to A and B.
+- Evidence from A and B is retained as evidence links.
+- Merge is blocked when unresolved scope conflict exists.
+
+Obsolete/historic validity metadata:
+
+```json
+{
+  "historical_validity": {
+    "status": "suspected_obsolete",
+    "valid_from": null,
+    "valid_to": null,
+    "reason": "...",
+    "review_decision_id": "..."
+  }
+}
+```
+
+This is metadata, not a new statement state.
 
 ## Requirements That Are Not Yet Fully Testable
 
-| ID | Requirement | Testability gap | Proposed action |
-|---|---|---|---|
-| NT-001 | "No best-practice normalization." | Hard to prove absence globally. | Add negative tests for known auto-normalization paths and keep review checklist/manual audit. |
-| NT-002 | "Candidate statement is readable." | Readability is subjective. | Use schema validation plus reviewer feedback; avoid treating it as automated pass/fail. |
-| NT-003 | "Evidence range precision." | Needs labeled benchmark for objective precision. | Demo fixture should include expected line ranges. |
-| NT-004 | "Reviewer rubber-stamping mitigation." | Sampling audit is described as later mitigation, not MVP feature. | Require reason for review decisions in MVP; defer sampling audit. |
-| NT-005 | "No source leakage in production logs." | Requires log policy and environment-mode tests. | Add production-mode log redaction tests in Phase 5. |
-| NT-006 | "100% understood / completeness" is explicitly not a goal. | Users may still infer completeness from dashboard. | UI copy must label dashboard as evidence coverage only. |
-| NT-007 | "Business SME understands statement." | Requires user research, not just automated tests. | Track under product validation plan H2. |
-| NT-008 | "Traceable export is useful for modernization architects." | Requires stakeholder validation. | Track under product validation plan H4. |
+| ID | Requirement | Testability gap | Proposed action | Blocking Phase 1? |
+|---|---|---|---|---|
+| NT-001 | No best-practice normalization. | Hard to prove absence globally. | Add negative tests for known auto-normalization paths and keep review checklist/manual audit. | No |
+| NT-002 | Candidate statement is readable. | Readability is subjective. | Use schema validation plus reviewer feedback; avoid treating it as automated pass/fail. | No |
+| NT-003 | Evidence range precision. | Needs labeled benchmark for objective precision. | Demo fixture should include expected line ranges. | No |
+| NT-004 | Reviewer rubber-stamping mitigation. | Sampling audit is described as later mitigation, not MVP feature. | Require reason for review decisions in MVP; defer sampling audit. | No |
+| NT-005 | No source leakage in production logs. | Requires log policy and environment-mode tests. | Add production-mode log redaction tests in Phase 5. | No |
+| NT-006 | 100% understood / completeness is explicitly not a goal. | Users may infer completeness from dashboard. | UI copy must label dashboard as evidence coverage only. | No |
+| NT-007 | Business SME understands statement. | Requires user research, not just automated tests. | Track under product validation plan H2. | No |
+| NT-008 | Traceable export is useful for modernization architects. | Requires stakeholder validation. | Track under product validation plan H4. | No |
 
-## Missing Or Underspecified Security Gates
+## Security Gates
 
-| ID | Gap | Risk | Phase to decide |
+| ID | Gap or gate | Decision/status | Blocking Phase 1? |
 |---|---|---|---|
-| SEC-GAP-001 | CSRF strategy if cookie sessions are used. | Authenticated state-changing requests may be vulnerable. | Phase 1 |
-| SEC-GAP-002 | Session cookie flags and invalidation behavior not specified. | Session theft or stale sessions. | Phase 1 |
-| SEC-GAP-003 | Password policy, lockout, and seed-user handling not specified. | Weak local credentials or leaked dev accounts. | Phase 1 |
-| SEC-GAP-004 | Rate-limit algorithm and storage not specified. | Inconsistent login/AI throttling. | Phase 1/5 |
-| SEC-GAP-005 | ZIP symlink, nested ZIP, path length, Unicode normalization, and entry-count limits not specified. | Bypass of path/storage restrictions. | Phase 2 |
-| SEC-GAP-006 | Content sniffing vs extension-only allowlist not specified. | Binary/polyglot content may be treated as safe text. | Phase 2 |
-| SEC-GAP-007 | Export authorization and exported file retention not specified. | Unauthorized or stale export downloads. | Phase 7 |
-| SEC-GAP-008 | Audit log tamper resistance/retention not specified. | Audit value may be weakened. | Phase 1/7 |
-| SEC-GAP-009 | AI prompt-injection handling not specified. | Source content may influence extraction instructions. | Phase 5 |
-| SEC-GAP-010 | CORS allowed origins not specified. | Overly broad browser access in local/prod mode. | Phase 1 |
+| SEC-GATE-001 | CSRF strategy if cookie sessions are used. | Resolved in ADR-002: CSRF token required for state-changing requests. | No |
+| SEC-GATE-002 | Session cookie flags and invalidation behavior. | Resolved in ADR-002: HTTP-only, `SameSite=Lax`, environment-specific `Secure`, server-side invalidation. | No |
+| SEC-GATE-003 | Password policy and seed-user handling. | Resolved in ADR-002: secure hash, generic errors, dev seed only under `APP_ENV=development`, password from environment. | No |
+| SEC-GATE-004 | Rate-limit algorithm and storage. | Resolved in ADR-002: login rate limit by IP and account identifier hash; AI rate limiting in Phase 5. | No |
+| SEC-GATE-005 | ZIP symlink, nested ZIP, path length, Unicode normalization, and entry-count limits. | Locked as Phase 2 ingestion requirements. | No |
+| SEC-GATE-006 | Content sniffing vs extension-only allowlist. | Decide exact sniffing implementation in Phase 2; not needed for Phase 1 foundation. | No |
+| SEC-GATE-007 | Export authorization and exported file retention. | Decide in Phase 7 export implementation. | No |
+| SEC-GATE-008 | Audit log tamper resistance/retention. | Phase 1 records append-only audit events; stronger tamper resistance/retention is Phase 7/post-MVP. | No |
+| SEC-GATE-009 | AI prompt-injection handling. | Phase 5 AI adapter must treat source as hostile and instruction-isolated. | No |
+| SEC-GATE-010 | CORS allowed origins. | Phase 1 must restrict origins through environment config. | No |
 
 ## Scope Drift Risks
 
@@ -103,6 +155,17 @@ These are not assumptions and should not be weakened during MVP delivery:
 | SCOPE-009 | Building enterprise SSO/multi-tenant SaaS governance. | Local auth and simple roles only. |
 | SCOPE-010 | Making dashboard imply complete business coverage. | Dashboard is evidence coverage, not absolute completeness. |
 
+## Remaining Open Assumptions
+
+| ID | Assumption | Phase affected | Blocking Phase 1? |
+|---|---|---|---|
+| OPEN-001 | Exact ZIP scanner numeric limits for entry count, path length, nesting, and decompression ratio. | Phase 2 | No |
+| OPEN-002 | Exact upload progress implementation details for 100 MB local upload. | Phase 2/7 | No |
+| OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
+| OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
+
+Phase 1 blocking assumptions: none.
+
 ## Assumption Update Rule
 
 Any new assumption discovered during implementation must be added here with:
@@ -111,4 +174,4 @@ Any new assumption discovered during implementation must be added here with:
 - Source/context.
 - Impact.
 - Whether it is accepted, needs user decision, or is deferred.
-
+- Whether it blocks the current phase.

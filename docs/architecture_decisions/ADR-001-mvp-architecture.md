@@ -1,6 +1,6 @@
 # ADR-001: MVP Architecture
 
-Date: 2026-08-05  
+Date: 2026-08-05
 Status: Accepted for MVP planning
 
 ## Context
@@ -17,6 +17,8 @@ The required constraints are strict:
 - Default stack is Python 3.12, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, PostgreSQL 16, Dramatiq + Redis, React/TypeScript/Vite, pytest, Playwright, Docker Compose.
 
 The audited repository has no existing implementation, so the architecture can be established from the documents without migrating legacy app code.
+
+ADR-002 locks the Phase 1 browser auth/session/CSRF design. This ADR delegates those details to ADR-002 rather than leaving cookie-versus-JWT behavior open.
 
 ## Decision
 
@@ -76,6 +78,7 @@ Domain rules:
 
 - Statement, evidence, review, project, conflict, and behavioral-test state transitions live in the domain/application layer.
 - Controllers call services and cannot own business transitions.
+- Project state transitions must follow the locked transition table in `docs/implementation_plan.md`.
 - Review transitions must create `ReviewDecision` and `AuditEvent` for important changes.
 - Verification requires reviewer permission and valid evidence.
 
@@ -85,6 +88,20 @@ AI boundary:
 - AI adapter returns structured proposals only.
 - Backend validates schema, evidence bounds, confidence, and forces candidate-only semantics.
 - AI adapter cannot access DB, write statements, change status, or create review decisions.
+
+Auth/session boundary:
+
+- Phase 1 auth follows ADR-002.
+- Browser sessions use opaque server-side session IDs in HTTP-only cookies.
+- CSRF protection is mandatory for state-changing requests.
+- Logout invalidates the server-side session.
+
+Dependency and migration governance:
+
+- Python dependencies must be pinned through a committed lock file.
+- Node dependencies must commit the generated lock file.
+- Type checking and linting are CI gates once tooling exists.
+- Alembic migrations must not be edited after they have been committed and applied; create a new migration instead.
 
 ## Consequences
 
@@ -102,6 +119,7 @@ Tradeoffs:
 - Some lineage/conflict queries may be less expressive than a graph model, but are sufficient for MVP.
 - Worker/API shared code must be packaged carefully to avoid duplicated domain logic.
 - Authentication/session design must be locked early because it affects UI, API, and security tests.
+  ADR-002 now locks this design before Phase 1 starts.
 
 ## Alternatives Considered
 
@@ -128,7 +146,7 @@ Phase 1 must establish:
 - Project layout matching this ADR.
 - Domain/service/controller separation.
 - Initial migration and audit foundation.
-- RBAC and auth tests.
+- RBAC, session, CSRF, and auth tests per ADR-002.
 - Health and Docker Compose smoke tests.
 
 Later phases must add regression tests for:
@@ -140,4 +158,3 @@ Later phases must add regression tests for:
 - AI invalid output and AI `verified` attempts.
 - No source execution.
 - Export reproducibility.
-

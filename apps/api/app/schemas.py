@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -128,6 +128,131 @@ class SourceContentLine(BaseModel):
 class SourceContentResponse(BaseModel):
     artifact: SourceArtifactOut
     lines: list[SourceContentLine]
+
+
+class AnalysisJobCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_ids: list[str] = Field(default_factory=list)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class AnalysisJobOut(BaseModel):
+    id: str
+    project_id: str
+    analyzer_version_id: str
+    analyzer_name: str
+    analyzer_version: str
+    extractor_kind: str
+    pattern_set_hash: str
+    configuration_hash: str
+    configuration: dict[str, Any]
+    status: str
+    request_fingerprint: str
+    requested_by: str
+    requested_artifact_count: int
+    attempt_no: int
+    retry_of_job_id: str | None
+    previous_project_status: str
+    failure_code: str | None
+    failure_message: str | None
+    candidate_count: int
+    gap_count: int
+    question_count: int
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    updated_at: datetime
+
+
+class BusinessStatementOut(BaseModel):
+    id: str
+    project_id: str
+    analysis_job_id: str
+    type: str
+    pattern_id: str
+    title: str
+    statement_text: str
+    structured_expression_json: dict[str, Any] | None
+    scope_json: dict[str, Any]
+    confidence: float
+    status: str
+    extraction_method: str
+    analyzer_version_id: str
+    primary_artifact_id: str
+    primary_chunk_id: str
+    candidate_identity_hash: str
+    unresolved_count: int
+    revision_no: int
+    supersedes_id: str | None
+    created_by: str | None
+    created_by_kind: str
+    created_at: datetime
+    updated_at: datetime
+    evidence_count: int
+
+
+class EvidenceOut(BaseModel):
+    id: str
+    project_id: str
+    analysis_job_id: str
+    statement_id: str | None
+    analysis_gap_id: str | None
+    unresolved_question_id: str | None
+    artifact_id: str
+    artifact_sha256: str
+    source_chunk_id: str
+    start_line: int
+    end_line: int
+    excerpt: str
+    excerpt_sha256: str
+    relation_type: str
+    extraction_method: str
+    pattern_id: str
+    analyzer_version_id: str
+    created_by: str | None
+    created_by_kind: str
+    created_at: datetime
+
+
+class AnalysisGapOut(BaseModel):
+    id: str
+    project_id: str
+    analysis_job_id: str
+    artifact_id: str | None
+    source_chunk_id: str | None
+    gap_type: str
+    title: str
+    description: str
+    severity: str
+    status: str
+    analyzer_version_id: str
+    identity_hash: str
+    created_by: str | None
+    created_by_kind: str
+    created_at: datetime
+    resolved_at: datetime | None
+    resolution_note: str | None
+
+
+class UnresolvedQuestionOut(BaseModel):
+    id: str
+    project_id: str
+    analysis_job_id: str
+    statement_id: str | None
+    artifact_id: str | None
+    source_chunk_id: str | None
+    question_type: str
+    question_text: str
+    status: str
+    priority: str
+    analyzer_version_id: str
+    identity_hash: str
+    created_by: str | None
+    created_by_kind: str
+    created_at: datetime
+    answered_at: datetime | None
+    answer_text: str | None
 
 
 class AuditEventOut(BaseModel):

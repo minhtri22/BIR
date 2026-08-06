@@ -32,6 +32,28 @@ def test_failed_additional_ingestion_can_restore_previous_stable_state() -> None
     assert transition.audit_event == "INGESTION_FAILED_OR_CANCELLED"
 
 
+def test_analysis_failure_can_restore_previous_stable_state() -> None:
+    transition = assert_project_transition(
+        "analyzing",
+        "ready_for_analysis",
+        "system",
+        "fail_or_cancel_analysis",
+    )
+
+    assert transition.audit_event == "ANALYSIS_FAILED_OR_CANCELLED"
+
+
+def test_admin_can_start_analysis() -> None:
+    transition = assert_project_transition(
+        "ready_for_analysis",
+        "analyzing",
+        "admin",
+        "start_analysis",
+    )
+
+    assert transition.audit_event == "ANALYSIS_STARTED"
+
+
 def test_archived_project_cannot_transition() -> None:
     with pytest.raises(ProjectStateError, match="Archived projects cannot transition"):
         assert_project_transition("archived", "draft", "admin")

@@ -1,8 +1,8 @@
 # Assumptions, Open Questions, and MVP Risk Register
 
 Date: 2026-08-06
-Phase: 2 secure source ingestion
-Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending.
+Phase: 3 static extraction design
+Status: Phase 3 implementation contract revised; implementation blocked pending Architect `CLOSED_PASS_DESIGN`.
 
 ## Locked Principles
 
@@ -67,6 +67,23 @@ These are not assumptions and must not be weakened during MVP delivery:
 | DEC-024 | Artifact content is integrity-checked by SHA-256 before source viewer decode. | Accepted | Tampered artifact files are rejected and audited as `ARTIFACT_INTEGRITY_MISMATCH`. |
 | DEC-025 | Encoding detection checks `cp932` and `shift_jis` before `cp1252` and `latin-1`; Latin-1 fallback is low confidence. | Accepted | Legacy Japanese source is identified more accurately, and Latin-1 fallback creates a warning. |
 | DEC-026 | MVP default upload limit remains 20 MB; `MAX_UPLOAD_BYTES` stays environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP. | Accepted by Product Owner on 2026-08-06 | Resolves OPEN-002 and removes the Phase 2 documentation blocker. |
+
+## Phase 3 Design Proposals Pending Architect Review
+
+These are design proposals, not implementation authorization:
+
+| ID | Proposal | Status | Impact |
+|---|---|---|---|
+| P3-DES-001 | Create `docs/implementation_contract/phase3_static_extraction_contract.md` as the Phase 3 design baseline. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Phase 3 implementation must not begin until this is approved. |
+| P3-DES-002 | Add a new Alembic migration `0003_phase3_static_extraction` during implementation for analyzer versions, analysis jobs, chunks, candidates, evidence, gaps, and unresolved questions. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Existing migrations remain immutable. |
+| P3-DES-003 | Lock analysis failure/cancel as `analyzing -> previous_project_status`, with `previous_project_status` stored on `AnalysisJob`, default `ready_for_analysis`, and audit `ANALYSIS_FAILED_OR_CANCELLED`. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Removes the prior open design blocker; implementation must update ADR-003 and `project_state.py` accordingly. |
+| P3-DES-004 | Use `request_fingerprint` shared across retries plus per-attempt `attempt_no`; unique `(project_id, request_fingerprint, attempt_no)`. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Avoids retry collision with idempotency uniqueness. |
+| P3-DES-005 | MVP allows only one active analysis job per project; active means `queued` or `running`. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Prevents project status races and requires 409 on concurrent job creation. |
+| P3-DES-006 | Server owns analyzer identity, version, pattern set hash, supported config keys, config bounds, and canonical config hash. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Clients may submit only artifact IDs and allowlisted configuration. |
+| P3-DES-007 | Candidate, evidence, gap, and question rows must include `analysis_job_id`; worker-created rows use `created_by_kind=system`. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Strengthens provenance beyond nullable `created_by`. |
+| P3-DES-008 | Evidence must have a DB check constraint requiring exactly one target FK among statement, gap, and unresolved question. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Moves target integrity into the database plus application validation. |
+| P3-DES-009 | Keep `source_artifacts.candidate_count` as a transactionally maintained cache; do not persist `business_statements.evidence_count` in Phase 3. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Requires reconciliation tests and avoids trusting a statement-level evidence count column. |
+| P3-DES-010 | Candidate identity is provenance-based: pattern ID, artifact hash, evidence ranges, structured expression, scope, analyzer version, and config hash; statement text is not a primary identity component. | Revised, pending Architect `CLOSED_PASS_DESIGN` | Prevents wording/template changes from creating false-new candidates. |
 
 ## Requirement Conflicts Or Tensions
 
@@ -181,7 +198,7 @@ This is metadata, not a new statement state.
 | OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
 | OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
 
-Phase 2 blocking assumptions: none after DEC-026; gate review still decides final Phase 2 status.
+Phase 3 implementation blocking assumptions: Architect `CLOSED_PASS_DESIGN` only. The revised contract no longer carries a known open analysis failure-transition question.
 
 ## Assumption Update Rule
 

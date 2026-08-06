@@ -1,8 +1,8 @@
 # Project Progress
 
 Date: 2026-08-06
-Current phase: Phase 2 - Secure Source Ingestion
-Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending
+Current phase: Phase 3 - Static Extraction Design
+Status: Phase 3 implementation contract revised; implementation blocked pending Architect `CLOSED_PASS_DESIGN`
 
 ## Phase 0
 
@@ -83,7 +83,45 @@ Implemented:
 
 No Phase 3 extraction, candidate generation, evidence model, review workflow, AI adapter, behavioral tests, or export implementation was added.
 
+Phase 2 gate and merge:
+
+- Architect gate review: APPROVED.
+- PR #1 merged into `main`.
+- Merge commit: `ead94f7a15956b7185a4fa66f8e83cb973a22be1`.
+
+## Phase 3 Design Summary
+
+Created design-only contract:
+
+- `docs/implementation_contract/phase3_static_extraction_contract.md`
+
+The contract defines:
+
+- Phase objective and out-of-scope boundaries.
+- Requirement traceability for REQ-011, REQ-012, REQ-013, REQ-017, REQ-018, REQ-019, REQ-033, REQ-035, REQ-036, and REQ-040.
+- Domain model and schema contract for `SourceChunk`, `AnalyzerVersion`, `AnalysisJob`, candidate `BusinessStatement`, `Evidence`, `AnalysisGap`, and `UnresolvedQuestion`.
+- Project, artifact, and job state model for static analysis.
+- Chunking, deterministic static extractor patterns, candidate rules, evidence rules, idempotency, API, UI, security, transaction/failure, migration, test matrix, and DoD.
+
+Revision required by design review has been applied in documentation:
+
+- Retry/idempotency now uses `request_fingerprint` shared across retries plus per-attempt `attempt_no`.
+- MVP now allows only one active analysis job per project.
+- Client no longer submits analyzer identity; server owns analyzer name, version, pattern set hash, supported configuration, and canonical config hash.
+- Analysis failure/cancel transition is locked as `analyzing -> previous_project_status`, defaulting to `ready_for_analysis`, with audit `ANALYSIS_FAILED_OR_CANCELLED`.
+- Evidence target integrity requires a DB exactly-one-target check.
+- Candidate, evidence, gap, and question provenance includes `analysis_job_id` and `created_by_kind`.
+- `source_artifacts.candidate_count` remains a transactionally maintained cache; `business_statements.evidence_count` is not persisted in Phase 3.
+- Candidate identity is provenance-based and does not primarily depend on natural-language statement text.
+
+No Phase 3 implementation code, migration, API, worker, or UI was added.
+
 ## Commands Run
+
+Phase 3 design revision:
+
+- `rg` checks for stale blocker wording and idempotency/API contradictions.
+- `git diff --check`
 
 Setup and dependency installation:
 
@@ -156,6 +194,16 @@ Phase 2 implemented or partially implemented:
 - REQ-037 upload-size enforcement subset; MVP default is 20 MB, the limit remains environment-configurable, and 100 MB + progress is formally deferred to Phase 7 or post-MVP.
 - REQ-040 third vertical-slice step: upload one source file.
 
+Phase 3 design covered, not implemented:
+
+- REQ-011 static extraction contract.
+- REQ-012 deterministic pattern contract.
+- REQ-013 async/idempotent analysis job contract, revised for request fingerprint, attempts, retry lineage, and one active job per project.
+- REQ-017 candidate schema and queue contract.
+- REQ-018 evidence-required candidate rule plus gap/question fallback contract, including DB exactly-one-target evidence constraint.
+- REQ-019 evidence schema continuation contract with `analysis_job_id` provenance.
+- REQ-033 uncertainty object contract.
+
 ## Known Limitations
 
 - Redis host port is `6380` to avoid an existing local port `6379` collision; API/worker still use internal Compose host `redis:6379`.
@@ -170,13 +218,16 @@ Phase 2 implemented or partially implemented:
 
 Open assumptions remain in `docs/assumptions.md`.
 
-Phase 2 blocking assumptions: none after the Product Owner decision on `Upload 100 MB có progress`; Phase 2 still requires gate review before any `CLOSED_PASS` decision.
+Phase 3 implementation blocking assumptions:
+
+- Architect must review the design PR and return `CLOSED_PASS_DESIGN`.
+- ADR-003 must be updated during implementation with the now-locked `fail_or_cancel_analysis` transition from `analyzing` to `previous_project_status`.
 
 ## Next Phase
 
-Phase 3 - Static extraction, blocked until Phase 2 gate review:
+Phase 3 implementation, blocked until Architect `CLOSED_PASS_DESIGN`:
 
 - Source chunking and deterministic static extractor.
-- Analyzer versioning and idempotency by artifact hash plus analyzer version.
+- Analyzer versioning and idempotency by artifact hash, server-owned analyzer/config, request fingerprint, and attempt number.
 - Candidate, gap/question, and evidence persistence.
 - Candidate queue UI.

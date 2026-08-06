@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 2 secure source ingestion
-Status: CONDITIONAL - revision complete, Product Owner decision required.
+Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending.
 
 ## Locked Principles
 
@@ -66,6 +66,7 @@ These are not assumptions and must not be weakened during MVP delivery:
 | DEC-023 | Upload reads are bounded by chunk and stop when `MAX_UPLOAD_BYTES` is exceeded. | Accepted | Oversized uploads do not proceed into parsing/storage and receive failure audit. |
 | DEC-024 | Artifact content is integrity-checked by SHA-256 before source viewer decode. | Accepted | Tampered artifact files are rejected and audited as `ARTIFACT_INTEGRITY_MISMATCH`. |
 | DEC-025 | Encoding detection checks `cp932` and `shift_jis` before `cp1252` and `latin-1`; Latin-1 fallback is low confidence. | Accepted | Legacy Japanese source is identified more accurately, and Latin-1 fallback creates a warning. |
+| DEC-026 | MVP default upload limit remains 20 MB; `MAX_UPLOAD_BYTES` stays environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP. | Accepted by Product Owner on 2026-08-06 | Resolves OPEN-002 and removes the Phase 2 documentation blocker. |
 
 ## Requirement Conflicts Or Tensions
 
@@ -76,7 +77,7 @@ These are not assumptions and must not be weakened during MVP delivery:
 | CLAR-003 | `merge_candidates` could conflict with no auto-merge and contradiction preservation. | Manual merge creates a new candidate or statement revision. Source candidates are not deleted; they become `superseded`; lineage and evidence links are preserved. Merge is blocked when unresolved scope conflict remains. | No |
 | CLAR-004 | SRS says one behavioral test per verified rule, while BA export readiness allows documented exceptions. | Export readiness requires each verified rule to have either a linked behavioral test or documented exception/warning. | No |
 | CLAR-005 | Secure session mechanism was undecided. | Resolved by ADR-002: opaque server-side session, HTTP-only cookie, CSRF, timeouts, server-side invalidation. | No |
-| CLAR-006 | Demo/capacity targets differ between 20-file ZIP, 100 files, and 100 MB upload. | Treat 20-file ZIP as demo acceptance; 100 text files and 100 MB upload as capacity/performance tests. | No |
+| CLAR-006 | Demo/capacity targets differ between 20-file ZIP, 100 files, and 100 MB upload. | Treat 20-file ZIP as demo acceptance; keep MVP default upload limit at 20 MB; defer 100 MB upload plus progress to Phase 7/post-MVP per DEC-026. | No |
 | CLAR-007 | Physical deletion was mentioned but conflicts with immutable artifacts and audit expectations. | Physical deletion is deferred outside MVP. No delete project API or UI. Archive only. | No |
 | CLAR-008 | Real AI provider scope could expand unexpectedly. | Mock adapter is mandatory. Real provider is optional stretch scope; Phase 5 can pass with mock adapter if boundaries are proven. | No |
 | CLAR-009 | Project status transitions and rollback rules were incomplete. | Project state machine is locked in `implementation_plan.md`, including allowed transitions, actors, preconditions, invalid transitions, archive behavior, and source upload after `export_ready`. | No |
@@ -176,11 +177,11 @@ This is metadata, not a new statement state.
 | ID | Assumption | Phase affected | Status / blocking impact |
 |---|---|---|---|
 | OPEN-001 | Exact ZIP scanner numeric limits for entry count, path length, nesting, and decompression ratio. | Phase 2 | Resolved in DEC-019. |
-| OPEN-002 | Product decision for SRS `Upload 100 MB có progress`. | Phase 2/7 | Blocking Phase 2 `CLOSED_PASS`. Product Owner must choose A: implement 100 MB plus progress in Phase 2, or B: keep MVP default 20 MB and formally defer 100 MB/progress to Phase 7 or post-MVP. |
+| OPEN-002 | Product decision for SRS `Upload 100 MB có progress`. | Phase 2/7 | Resolved in DEC-026: MVP default is 20 MB, the limit remains environment-configurable, and 100 MB/progress is deferred to Phase 7 or post-MVP. |
 | OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
 | OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
 
-Phase 2 blocking assumption: OPEN-002.
+Phase 2 blocking assumptions: none after DEC-026; gate review still decides final Phase 2 status.
 
 ## Assumption Update Rule
 

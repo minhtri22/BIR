@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 2 secure source ingestion
-Status: CONDITIONAL - revision complete, Product Owner decision required.
+Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending.
 
 Sources:
 
@@ -57,7 +57,7 @@ Status legend:
 | REQ-034 | SRS Section 6 Principles; BA BR-011, BR-018 | No industry best-practice normalization. | External templates are checklists/references only. | Domain policy, Glossary, AI prompt policy; review UI and AI adapter | Phase 3/5/6 | Planned | Negative auto-normalization tests and review checklist |
 | REQ-035 | SRS Section 15 Security; Handoff Security gates; BA Risk 5; BA BR-013 | Security controls include upload limit, CORS limits, login/AI rate limiting, secure sessions, password hashing, no source execution, HTML escaping, storage isolation. | All security gates must be tested. | Auth, Ingestion, Source Viewer, AI Adapter, Config | Phase 1/2/5/7 | Partially implemented | Phase 1 auth/session/CSRF/RBAC/CORS/password/rate-limit tests passed; Phase 2 bounded upload limit, ZIP hardening, no execution, source escaping, artifact integrity check, and storage isolation passed; AI/export security remain later |
 | REQ-036 | SRS Section 16 Observability; SRS Section 15 Security; BA Risk 5; BA BR-013 | Observability includes structured logs, request ID, job logs, health endpoint, no source content in production error logs. | Logs must not leak source by default. | Observability, API middleware, Worker; health endpoint | Phase 1/5 | Partially implemented | Health endpoint, worker health shell, request ID middleware; production log redaction remains Phase 5 |
-| REQ-037 | SRS Section 16 Performance; BA Product KPI; BA BR-016, BR-017 | Performance targets cover pagination, source view latency, upload progress, and async analysis. | MVP must avoid blocking analysis in request path. | API, UI, Worker; statement list, source viewer, upload UI, analysis jobs | Phase 2/3/7 | Blocked/Clarify | Phase 2 bounded upload limit and source viewer smoke covered. SRS `Upload 100 MB có progress` awaits Product Owner decision: A implement 100 MB plus progress in Phase 2, or B keep 20 MB MVP limit and defer 100 MB/progress to Phase 7/post-MVP. |
+| REQ-037 | SRS Section 16 Performance; BA Product KPI; BA BR-016, BR-017 | Performance targets cover pagination, source view latency, upload progress, and async analysis. | MVP must avoid blocking analysis in request path. | API, UI, Worker; statement list, source viewer, upload UI, analysis jobs | Phase 2/3/7 | Partially implemented | Phase 2 bounded 20 MB default upload limit and source viewer smoke covered. Product Owner decision DEC-026 defers 100 MB upload support plus progress UI to Phase 7 or post-MVP while keeping `MAX_UPLOAD_BYTES` environment-configurable. |
 | REQ-038 | SRS Section 17 Architecture; SRS Section 18 Project structure; BA Section 20 Constraints; BA BR-010 | MVP runs with Docker Compose and PostgreSQL. | No cloud vendor dependency; local storage abstraction with S3-compatible interface. | DevOps, Infrastructure, Storage; `docker compose up`, `.env.example` | Phase 1 | Implemented | Compose config/build/start smoke; PostgreSQL Alembic migration passed |
 | REQ-039 | SRS Section 22 Definition of Done; BA Validation plan; BA BR-013 | README documents setup and demo. | DoD requires API docs and runnable increment. | Documentation; README and OpenAPI docs | Phase 1/7 | Implemented | README added; FastAPI OpenAPI available from running API |
 | REQ-040 | SRS Section 19 Acceptance; Handoff first vertical slice; BA Acceptance Criteria; BA BR-001 through BR-013 | First vertical slice reaches login -> project -> upload -> candidate -> evidence -> reviewer verify -> behavioral test -> JSON export. | Must include migration, API, UI, auth, audit, unit/integration/E2E tests. | Cross-module full UI/API path | Phase 1-7 | Partially implemented | Phase 1 E2E covers login -> create project -> project appears in list; Phase 2 E2E covers upload -> inventory -> escaped source viewer |
@@ -139,7 +139,7 @@ Phase 2 coverage:
 - TC-01 is implemented.
 - TC-11 artifact hash preservation is implemented; evidence/export usage remains later.
 - TC-15 ingestion no-execution is implemented; extraction no-execution remains Phase 3.
-- REQ-037 is blocked/clarify because `Upload 100 MB có progress` needs Product Owner decision before Phase 2 can close.
+- REQ-037 is partially implemented for Phase 2: bounded upload enforcement and source viewer smoke are covered; 100 MB upload support plus progress UI is formally deferred by DEC-026 to Phase 7 or post-MVP.
 - REQ-035, REQ-036, REQ-032, REQ-037, and REQ-040 are partially implemented for their Phase 1/2 subsets.
 - REQ-038 and REQ-039 are implemented for Phase 1.
 - Extraction, evidence, review, AI, behavioral test, dashboard, and export requirements remain planned.

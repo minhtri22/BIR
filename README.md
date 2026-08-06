@@ -2,7 +2,7 @@
 
 Phase 2 secure source ingestion for the Business Forensics Platform MVP.
 
-Current gate status: Phase 2 is conditional pending Product Owner decision on `Upload 100 MB có progress`.
+Current gate status: Phase 2 revision is ready for gate review; Product Owner locked the 20 MB MVP default upload limit and deferred 100 MB/progress to Phase 7 or post-MVP.
 
 ## Stack
 
@@ -80,7 +80,7 @@ npm run test:e2e
 
 The suite covers the Phase 1 mandatory flow and the Phase 2 upload -> inventory -> escaped source viewer flow.
 
-The default MVP upload limit is currently `20 MB`. The SRS `Upload 100 MB có progress` requirement is intentionally tracked as an open Product Owner decision, not silently deferred.
+The default MVP upload limit is `20 MB`. `MAX_UPLOAD_BYTES` is environment-configurable; 100 MB upload support and progress UI are formally deferred to Phase 7 or post-MVP.
 
 ## Implemented Scope
 

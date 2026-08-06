@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 2 - Secure source ingestion
-Status: CONDITIONAL - revision complete, Product Owner decision required; Phase 3 not started.
+Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; Phase 3 not started.
 
 Source documents:
 
@@ -264,10 +264,11 @@ Phase 2 revision evidence:
 - Alembic migration `0002_phase2_source_ingestion` passed on SQLite and PostgreSQL via Compose.
 - Docker Compose API, worker, and web rebuilt and started.
 
-Phase 2 cannot close as `CLOSED_PASS` until Product Owner chooses how to handle SRS `Upload 100 MB có progress`:
+Product Owner decision on 2026-08-06:
 
-- Option A: implement 100 MB upload support plus progress in Phase 2.
-- Option B: keep MVP default upload limit at 20 MB and formally defer 100 MB/progress to Phase 7 or post-MVP.
+- MVP default upload limit remains 20 MB.
+- `MAX_UPLOAD_BYTES` remains environment-configurable.
+- Upload 100 MB support plus progress UI is deferred to Phase 7 or post-MVP.
 
 ### Phase 3 - Static extraction
 

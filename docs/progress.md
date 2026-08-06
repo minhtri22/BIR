@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Current phase: Phase 2 - Secure Source Ingestion
-Status: CONDITIONAL - revision complete, Product Owner decision required
+Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending
 
 ## Phase 0
 
@@ -153,7 +153,7 @@ Phase 2 implemented or partially implemented:
 - REQ-009 immutable artifact inventory metadata.
 - REQ-010 source viewer line numbers and escaping; evidence highlighting remains later.
 - REQ-035 ingestion/source-viewer security subset.
-- REQ-037 upload-size enforcement subset; 100 MB + progress remains a blocking Product Owner decision.
+- REQ-037 upload-size enforcement subset; MVP default is 20 MB, the limit remains environment-configurable, and 100 MB + progress is formally deferred to Phase 7 or post-MVP.
 - REQ-040 third vertical-slice step: upload one source file.
 
 ## Known Limitations
@@ -162,9 +162,7 @@ Phase 2 implemented or partially implemented:
 - PostgreSQL host port is `55432` to avoid an existing local port `5432` collision; Compose services still use `db:5432`.
 - Full review workflow endpoint is only an RBAC-protected Phase 1 stub; implementation starts in Phase 4.
 - Extraction, evidence persistence, AI adapter, behavioral tests, dashboard, and export remain later phases.
-- The SRS requirement `Upload 100 MB có progress` is not closed. Product Owner must choose either:
-  - Option A: implement 100 MB upload support plus progress in Phase 2.
-  - Option B: keep MVP default upload limit at 20 MB and formally defer 100 MB/progress to Phase 7 or post-MVP.
+- The default MVP upload limit is 20 MB. `MAX_UPLOAD_BYTES` remains environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP by Product Owner decision on 2026-08-06.
 - Evidence/export usage of artifact hashes remains deferred until evidence and export models exist.
 - `npm install` reports development-tool advisories, but `npm audit --omit=dev` reports zero production vulnerabilities.
 
@@ -172,7 +170,7 @@ Phase 2 implemented or partially implemented:
 
 Open assumptions remain in `docs/assumptions.md`.
 
-Phase 2 blocking assumption: Product Owner decision is required for `Upload 100 MB có progress`; Phase 2 must not be marked `CLOSED_PASS` until that is locked.
+Phase 2 blocking assumptions: none after the Product Owner decision on `Upload 100 MB có progress`; Phase 2 still requires gate review before any `CLOSED_PASS` decision.
 
 ## Next Phase
 

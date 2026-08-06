@@ -1,7 +1,7 @@
 # Phase 3 Static Extraction Implementation Contract
 
 Date: 2026-08-06
-Status: DESIGN_DRAFT - implementation blocked pending Architect `CLOSED_PASS_DESIGN`
+Status: DESIGN_REVISION - implementation blocked pending Architect `CLOSED_PASS_DESIGN`
 Branch: `phase-3-static-extraction-design`
 
 This contract is the required design baseline for Phase 3. It does not authorize implementation code.
@@ -15,7 +15,7 @@ Objective:
 - Persist analyzer versions, analysis jobs, candidate `BusinessStatement` records, evidence, `AnalysisGap`, and `UnresolvedQuestion`.
 - Move eligible projects through `ready_for_analysis -> analyzing -> review_in_progress`.
 - Provide API and UI contracts for creating analysis jobs and browsing the candidate queue.
-- Prove idempotency by artifact SHA-256, analyzer name/version, configuration hash, and chunk identity.
+- Prove idempotency by artifact SHA-256, server-owned analyzer identity, canonical configuration hash, request fingerprint, attempt number, and chunk identity.
 
 Out of scope:
 
@@ -51,27 +51,29 @@ Out of scope:
 
 `AnalyzerVersion`:
 
-- Immutable identity for analyzer name, version, extractor kind, and configuration hash.
+- Server-owned immutable identity for analyzer name, version, extractor kind, pattern set hash, and canonical configuration hash.
 - Defines the pattern set and chunking configuration used for a run.
-- A change to patterns, chunking limits, normalization, or confidence rules creates a new analyzer version or configuration hash.
+- A change to analyzer code, pattern definitions, supported configuration keys, normalization, or confidence rules creates a new analyzer version or pattern set hash.
+- Clients must not submit `analyzer_name`, `analyzer_version`, or `pattern_set_hash`.
 
 `AnalysisJob`:
 
-- User or system requested analysis run for one project and one analyzer version/configuration.
-- Tracks queued/running/succeeded/failed/cancelled state, attempts, retry lineage, and idempotency key.
+- User or system requested analysis run for one project and one server-owned analyzer version/configuration.
+- Tracks queued/running/succeeded/failed/cancelled state, shared `request_fingerprint`, per-attempt `attempt_no`, retry lineage, and previous project status.
 - Owns job-artifact links and audit events.
+- MVP allows only one active analysis job per project, where active means `queued` or `running`.
 
 `BusinessStatement` candidate:
 
 - Natural-language candidate produced by static extraction.
 - Phase 3 creates only `status="candidate"`.
 - Requires at least one evidence row before commit.
-- Stores type, title, statement text, structured expression, scope, confidence, extraction method, analyzer version, and provenance hash.
+- Stores type, title, statement text, structured expression, scope, confidence, extraction method, analyzer version, analysis job ID, pattern ID, and provenance hash.
 
 `Evidence`:
 
 - Immutable source-backed link from a candidate, gap, or unresolved question to artifact lines.
-- Stores artifact ID, artifact SHA-256 at extraction time, source chunk ID, start/end lines, immutable escaped-safe excerpt text, extraction method, analyzer version, and relation type.
+- Stores analysis job ID, artifact ID, artifact SHA-256 at extraction time, source chunk ID, start/end lines, immutable escaped-safe excerpt text, extraction method, analyzer version, and relation type.
 
 `AnalysisGap`:
 
@@ -94,17 +96,23 @@ Implementation must create a new Alembic migration named conceptually `0003_phas
 | Field | Type | Nullable | Constraint | Index/uniqueness | Lineage/provenance |
 |---|---|---:|---|---|---|
 | `id` | `String(36)` | no | primary key | PK | stable analyzer version ID |
-| `analyzer_name` | `String(80)` | no | non-empty | index | example `static-cobol-mvp` |
-| `analyzer_version` | `String(40)` | no | semver or date version | index | changes when pattern code changes |
+| `analyzer_name` | `String(80)` | no | server-owned non-empty value | index | example `static-cobol-mvp` |
+| `analyzer_version` | `String(40)` | no | server-owned semver or date version | index | changes when analyzer code changes |
 | `extractor_kind` | `String(32)` | no | `static` in Phase 3 | index | separates future AI/hybrid |
-| `configuration_json` | `JSON` | no | deterministic key order before hash | none | source of configuration hash |
-| `configuration_hash` | `String(64)` | no | SHA-256 hex | index | chunk size, overlap, enabled patterns |
-| `pattern_set_hash` | `String(64)` | no | SHA-256 hex | none | identifies deterministic pattern definitions |
+| `configuration_json` | `JSON` | no | server-canonical, allowlisted keys only | none | source of configuration hash |
+| `configuration_hash` | `String(64)` | no | SHA-256 hex of canonical config | index | chunk size, overlap, enabled patterns |
+| `pattern_set_hash` | `String(64)` | no | server-owned SHA-256 hex | none | identifies deterministic pattern definitions in code |
 | `created_at` | `DateTime` | no | UTC | none | immutable creation time |
 
 Uniqueness:
 
 - Unique `(analyzer_name, analyzer_version, configuration_hash)`.
+
+Server ownership:
+
+- API clients cannot set `analyzer_name`, `analyzer_version`, or `pattern_set_hash`.
+- The server resolves analyzer identity from deployed code and canonicalizes allowed client configuration before hashing.
+- Unknown configuration keys, unsupported pattern IDs, unsafe numeric values, or values outside configured bounds are rejected before job creation.
 
 ### `analysis_jobs`
 
@@ -114,17 +122,28 @@ Uniqueness:
 | `project_id` | `String(36)` | no | FK `projects.id` | index `(project_id, status)` | project scope |
 | `analyzer_version_id` | `String(36)` | no | FK `analyzer_versions.id` | index | analyzer provenance |
 | `status` | `String(32)` | no | `queued`, `running`, `succeeded`, `failed`, `cancelled` | index | job lifecycle |
-| `idempotency_key` | `String(64)` | no | SHA-256 hex | unique `(project_id, idempotency_key)` | duplicate prevention |
+| `request_fingerprint` | `String(64)` | no | SHA-256 hex | index | shared deterministic identity across retries |
 | `requested_by` | `String(36)` | no | FK `users.id` | index | actor |
 | `requested_artifact_count` | `Integer` | no | `>= 1` | none | request summary |
 | `attempt_no` | `Integer` | no | `>= 1` | none | retry attempt |
 | `retry_of_job_id` | `String(36)` | yes | FK `analysis_jobs.id` | index | retry lineage |
+| `previous_project_status` | `String(32)` | no | default `ready_for_analysis`; must be a stable non-`analyzing` status | none | failure/cancel recovery |
 | `failure_code` | `String(80)` | yes | controlled codes | index optional | failure classification |
 | `failure_message` | `Text` | yes | no source body | none | safe diagnostic |
 | `created_at` | `DateTime` | no | UTC | index `(project_id, created_at)` | request time |
 | `started_at` | `DateTime` | yes | UTC | none | runtime |
 | `completed_at` | `DateTime` | yes | UTC | none | runtime |
 | `updated_at` | `DateTime` | no | UTC | none | runtime |
+
+Uniqueness and active-job gates:
+
+- Unique `(project_id, request_fingerprint, attempt_no)`.
+- At most one active attempt for the same `(project_id, request_fingerprint)`, where active is `queued` or `running`.
+- At most one active analysis job per `project_id` in MVP, regardless of artifact selection.
+- The active-job rules must be enforced in the application transaction and with partial unique indexes where supported:
+  - unique active project index on `project_id` where `status in ('queued', 'running')`;
+  - unique active request index on `(project_id, request_fingerprint)` where `status in ('queued', 'running')`.
+- If a database backend cannot express a partial unique index portably, application-level transactional checks and concurrency tests are still mandatory.
 
 ### `analysis_job_artifacts`
 
@@ -147,6 +166,7 @@ Uniqueness:
 | `id` | `String(36)` | no | primary key | PK | chunk ID |
 | `project_id` | `String(36)` | no | FK `projects.id` | index | project scope |
 | `artifact_id` | `String(36)` | no | FK `source_artifacts.id` | index `(artifact_id, start_line)` | source artifact |
+| `analysis_job_id` | `String(36)` | no | FK `analysis_jobs.id` | index | job provenance |
 | `analyzer_version_id` | `String(36)` | no | FK `analyzer_versions.id` | index | chunking provenance |
 | `chunk_index` | `Integer` | no | deterministic 0-based sequence | unique with artifact/analyzer | ordering |
 | `start_line` | `Integer` | no | `>= 1` | index | source range |
@@ -169,7 +189,9 @@ Uniqueness:
 |---|---|---:|---|---|---|
 | `id` | `String(36)` | no | primary key | PK | statement ID |
 | `project_id` | `String(36)` | no | FK `projects.id` | index `(project_id, status)` | project scope |
+| `analysis_job_id` | `String(36)` | no | FK `analysis_jobs.id` | index | job provenance |
 | `type` | `String(40)` | no | SRS statement type | index | semantic class |
+| `pattern_id` | `String(80)` | no | server-supported pattern ID | index | extractor rule provenance |
 | `title` | `String(240)` | no | non-empty | text search later | readable label |
 | `statement_text` | `Text` | no | non-empty | none | candidate content |
 | `structured_expression_json` | `JSON` | yes | object when present | none | machine-readable proposal |
@@ -181,11 +203,11 @@ Uniqueness:
 | `primary_artifact_id` | `String(36)` | no | FK `source_artifacts.id` | index | source provenance |
 | `primary_chunk_id` | `String(36)` | no | FK `source_chunks.id` | index | source provenance |
 | `candidate_identity_hash` | `String(64)` | no | SHA-256 | unique with project/analyzer | duplicate prevention |
-| `evidence_count` | `Integer` | no | `>= 1` at commit | none | evidence invariant |
 | `unresolved_count` | `Integer` | no | `>= 0` | none | UI queue metadata |
 | `revision_no` | `Integer` | no | default `1` | none | Phase 4 lineage |
 | `supersedes_id` | `String(36)` | yes | FK `business_statements.id` | index | Phase 4 lineage placeholder |
 | `created_by` | `String(36)` | yes | FK `users.id`; null allowed for system worker | index | actor/system provenance |
+| `created_by_kind` | `String(16)` | no | `system` or `user` | index | disambiguates nullable `created_by` |
 | `created_at` | `DateTime` | no | UTC | index | provenance |
 | `updated_at` | `DateTime` | no | UTC | none | provenance |
 
@@ -193,7 +215,26 @@ Uniqueness:
 
 - Unique `(project_id, analyzer_version_id, candidate_identity_hash)`.
 
-The uniqueness key prevents duplicate output from the same deterministic run. It must not auto-merge similar candidates across different scopes, artifacts, analyzer versions, or configurations.
+The uniqueness key prevents duplicate output from the same deterministic run. It must not auto-merge similar candidates across different scopes, artifacts, analyzer versions, configurations, or evidence ranges.
+
+Candidate identity hash inputs:
+
+- Artifact SHA-256.
+- Server-owned analyzer name/version.
+- Canonical configuration hash.
+- `pattern_id`.
+- Statement type.
+- Canonical scope JSON.
+- Canonical structured expression JSON.
+- Evidence ranges as sorted `(artifact_sha256, start_line, end_line, relation_type)` tuples.
+
+Natural-language `statement_text` is not a primary identity component. It may be included only as non-authoritative display content so wording/template changes do not create duplicates when the underlying provenance is the same.
+
+Counts:
+
+- Phase 3 does not persist `business_statements.evidence_count`.
+- Candidate list/detail APIs return evidence count computed by query or by a transactionally refreshed read model.
+- The evidence invariant is enforced by requiring committed evidence rows, not by trusting a statement count column.
 
 ### `evidence`
 
@@ -201,6 +242,7 @@ The uniqueness key prevents duplicate output from the same deterministic run. It
 |---|---|---:|---|---|---|
 | `id` | `String(36)` | no | primary key | PK | evidence ID |
 | `project_id` | `String(36)` | no | FK `projects.id` | index | project scope |
+| `analysis_job_id` | `String(36)` | no | FK `analysis_jobs.id` | index | job provenance |
 | `statement_id` | `String(36)` | yes | FK `business_statements.id` | index | candidate target |
 | `analysis_gap_id` | `String(36)` | yes | FK `analysis_gaps.id` | index | gap target |
 | `unresolved_question_id` | `String(36)` | yes | FK `unresolved_questions.id` | index | question target |
@@ -219,11 +261,14 @@ The uniqueness key prevents duplicate output from the same deterministic run. It
 | `status` | `String(32)` | no | `captured` in Phase 3 | index | later validation state |
 | `note` | `Text` | yes | analyst/system note, no source beyond excerpt | none | context |
 | `created_by` | `String(36)` | yes | FK `users.id` | index | actor/system provenance |
+| `created_by_kind` | `String(16)` | no | `system` or `user` | index | disambiguates nullable `created_by` |
 | `created_at` | `DateTime` | no | UTC | none | provenance |
 
 Constraints:
 
-- Exactly one of `statement_id`, `analysis_gap_id`, or `unresolved_question_id` must be non-null.
+- Database check constraint: exactly one of `statement_id`, `analysis_gap_id`, or `unresolved_question_id` must be non-null.
+  - Conceptual SQL: `CHECK (((statement_id IS NOT NULL)::int + (analysis_gap_id IS NOT NULL)::int + (unresolved_question_id IS NOT NULL)::int) = 1)`.
+  - The Alembic migration must use a portable SQLAlchemy check expression for SQLite/PostgreSQL where possible, plus application validation.
 - `start_line` and `end_line` must be within `source_artifacts.line_count`; enforce in application tests because cross-table checks are not portable.
 
 Uniqueness:
@@ -236,6 +281,7 @@ Uniqueness:
 |---|---|---:|---|---|---|
 | `id` | `String(36)` | no | primary key | PK | gap ID |
 | `project_id` | `String(36)` | no | FK `projects.id` | index `(project_id, status)` | project scope |
+| `analysis_job_id` | `String(36)` | no | FK `analysis_jobs.id` | index | job provenance |
 | `artifact_id` | `String(36)` | yes | FK `source_artifacts.id` | index | source scope |
 | `source_chunk_id` | `String(36)` | yes | FK `source_chunks.id` | index | chunk scope |
 | `gap_type` | `String(60)` | no | controlled values | index | e.g. `missing_dependency`, `unsupported_pattern`, `ambiguous_control_flow`, `insufficient_evidence` |
@@ -245,6 +291,8 @@ Uniqueness:
 | `status` | `String(32)` | no | `open`, `resolved`, `deferred` | index | gap lifecycle |
 | `analyzer_version_id` | `String(36)` | no | FK `analyzer_versions.id` | index | analyzer provenance |
 | `identity_hash` | `String(64)` | no | SHA-256 | unique with project/analyzer | duplicate prevention |
+| `created_by` | `String(36)` | yes | FK `users.id` | index | actor/system provenance |
+| `created_by_kind` | `String(16)` | no | `system` or `user` | index | disambiguates nullable `created_by` |
 | `created_at` | `DateTime` | no | UTC | index | provenance |
 | `resolved_at` | `DateTime` | yes | UTC | none | later lifecycle |
 | `resolution_note` | `Text` | yes | no verified claim | none | later lifecycle |
@@ -255,6 +303,7 @@ Uniqueness:
 |---|---|---:|---|---|---|
 | `id` | `String(36)` | no | primary key | PK | question ID |
 | `project_id` | `String(36)` | no | FK `projects.id` | index `(project_id, status)` | project scope |
+| `analysis_job_id` | `String(36)` | no | FK `analysis_jobs.id` | index | job provenance |
 | `statement_id` | `String(36)` | yes | FK `business_statements.id` | index | candidate context |
 | `artifact_id` | `String(36)` | yes | FK `source_artifacts.id` | index | source context |
 | `source_chunk_id` | `String(36)` | yes | FK `source_chunks.id` | index | chunk context |
@@ -264,6 +313,8 @@ Uniqueness:
 | `priority` | `String(20)` | no | `low`, `medium`, `high` | index | triage |
 | `analyzer_version_id` | `String(36)` | no | FK `analyzer_versions.id` | index | analyzer provenance |
 | `identity_hash` | `String(64)` | no | SHA-256 | unique with project/analyzer | duplicate prevention |
+| `created_by` | `String(36)` | yes | FK `users.id` | index | actor/system provenance |
+| `created_by_kind` | `String(16)` | no | `system` or `user` | index | disambiguates nullable `created_by` |
 | `created_at` | `DateTime` | no | UTC | index | provenance |
 | `answered_at` | `DateTime` | yes | UTC | none | later lifecycle |
 | `answer_text` | `Text` | yes | no automatic verification | none | later lifecycle |
@@ -293,14 +344,27 @@ Project transitions:
 - `review_in_progress -> analyzing`: re-analysis requested for new analyzer/config or explicit analyst reason.
 - `export_ready -> analyzing`: allowed by ADR-003, but export readiness is revoked.
 - `analyzing -> review_in_progress`: job completes with candidates, gaps/questions, or an empty result.
+- `analyzing -> previous_project_status`: job fails or is cancelled, using `AnalysisJob.previous_project_status`.
+
+MVP active-job rule:
+
+- A project may have at most one active analysis job.
+- `queued` and `running` are active.
+- Creating a new analysis job while any active job exists for the project returns HTTP `409`.
+- Project status must not transition away from `analyzing` while an active job remains.
+- Worker completion/failure handlers must verify the completing job is the only active job for the project before changing project status.
 
 Failure and retry behavior:
 
-- ADR-003 currently defines `complete_analysis` but not an explicit failed/cancelled analysis transition.
-- Phase 3 implementation must either update ADR-003 and `project_state.py` with `fail_or_cancel_analysis`, or the Architect must approve a different failure transition before code starts.
-- Proposed failure transition: `analyzing -> previous stable state` with audit `ANALYSIS_FAILED_OR_CANCELLED`; default previous stable state is `ready_for_analysis`.
-- Retry creates a new job row with `retry_of_job_id` pointing to the failed job and the same deterministic idempotency key only when the previous job is failed/cancelled.
-- Retrying a succeeded idempotency key returns or references the existing succeeded result and must not duplicate candidates.
+- Phase 3 implementation must update ADR-003 and `packages/domain/project_state.py` with `fail_or_cancel_analysis`.
+- `AnalysisJob.previous_project_status` is captured at job creation before the project moves to `analyzing`.
+- Allowed previous statuses are `ready_for_analysis`, `review_in_progress`, and `export_ready`.
+- Default previous status is `ready_for_analysis` when recovery context is missing.
+- Failure/cancel transition is `analyzing -> previous_project_status`.
+- Failure/cancel audit event is `ANALYSIS_FAILED_OR_CANCELLED`.
+- Because MVP allows only one active job per project, restore is straightforward; still, handlers must check that no other active job remains before restoring.
+- Retry creates a new job row with the same `request_fingerprint`, next `attempt_no`, and `retry_of_job_id` pointing to the failed/cancelled job.
+- Retrying a succeeded `request_fingerprint` returns or references the existing succeeded result and must not create a new attempt.
 
 ## 6. Chunking Contract
 
@@ -320,7 +384,10 @@ Configurable sizing:
 
 - Required config keys: `chunk_max_lines`, `chunk_overlap_lines`, `max_excerpt_lines`, `enabled_patterns`.
 - MVP defaults proposed for implementation: `chunk_max_lines=120`, `chunk_overlap_lines=20`, `max_excerpt_lines=80`.
-- Configuration is included in `configuration_json` and `configuration_hash`.
+- Client-supplied configuration must be validated against a server allowlist.
+- Numeric values must be clamped or rejected according to server-defined min/max bounds before hashing.
+- Unknown keys and unsupported `enabled_patterns` must be rejected.
+- Configuration is canonicalized by the server into `configuration_json` and `configuration_hash`.
 
 No semantic loss across boundaries:
 
@@ -366,7 +433,8 @@ Confidence:
 - No auto-merge across candidates.
 - No auto-normalization to best practice, industry terms, or inferred target architecture.
 - Candidate text must distinguish observed behavior from interpretation.
-- Candidate identity hash must include project ID, artifact SHA-256, analyzer version/config, statement type, normalized statement text, scope, and evidence ranges.
+- Candidate identity hash must be based on project ID, artifact SHA-256, server-owned analyzer version/config, pattern ID, statement type, canonical scope, canonical structured expression, and evidence ranges.
+- Natural-language statement wording must not be a primary identity component.
 
 ## 9. Evidence Contract
 
@@ -396,17 +464,30 @@ Idempotency inputs:
 
 - Project ID.
 - Sorted artifact IDs and artifact SHA-256 values.
-- Analyzer name.
-- Analyzer version.
-- Configuration hash.
+- Server-owned analyzer name.
+- Server-owned analyzer version.
+- Server-owned pattern set hash.
+- Server-canonical configuration hash.
 - Chunk identity.
 
-Job idempotency:
+Request fingerprint:
 
-- `idempotency_key = sha256(project_id + sorted artifact sha256 values + analyzer name/version + configuration_hash)`.
-- Creating a job with a succeeded matching idempotency key returns the existing job/result or `200` with existing metadata.
-- Creating a job while a matching job is queued/running returns `409` or the current job, but must not enqueue duplicate worker work.
-- Retrying a failed job creates a retry job linked to the failed job.
+- `request_fingerprint = sha256(project_id + sorted artifact sha256 values + server analyzer name/version + pattern_set_hash + canonical configuration_hash)`.
+- The same `request_fingerprint` is reused across retries of the same logical request.
+- Each attempt is distinguished by `attempt_no`.
+- Unique key: `(project_id, request_fingerprint, attempt_no)`.
+
+Job creation behavior:
+
+- If a job with the same `request_fingerprint` has `succeeded`, return the existing result or job metadata with HTTP `200`.
+- If a job with the same `request_fingerprint` is `queued` or `running`, return the existing active job or HTTP `409`; do not enqueue duplicate work.
+- If the latest job for the same `request_fingerprint` is `failed` or `cancelled`, create a new attempt with `attempt_no = previous max + 1` and `retry_of_job_id` pointing to the failed/cancelled job.
+- Retry never reuses the same unique `(project_id, request_fingerprint, attempt_no)`.
+
+Project-level concurrency:
+
+- If any analysis job for the project is `queued` or `running`, creating another job for that project returns HTTP `409`, even if the new job targets different artifacts or a different request fingerprint.
+- Parallel per-artifact analysis is deferred beyond MVP.
 
 Duplicate prevention:
 
@@ -419,7 +500,9 @@ Re-analysis/version behavior:
 - New analyzer version or configuration hash can create new candidates for the same artifact.
 - Old candidates are not deleted.
 - Prior candidates may later become `superseded` only through Phase 4 review/revision rules.
-- `source_artifacts.candidate_count` must reflect current persisted candidate count for the artifact.
+- `source_artifacts.candidate_count` is a transactionally maintained cache for candidate count by primary artifact.
+- APIs must not accept direct writes to `candidate_count`.
+- Reconciliation tests must compare `source_artifacts.candidate_count` with a query count from `business_statements.primary_artifact_id`.
 
 ## 11. API Contract
 
@@ -429,23 +512,40 @@ Create analysis job:
 
 - `POST /api/v1/projects/{projectId}/analysis-jobs`
 - Roles: `admin`, `analyst`.
+- Server, not client, determines analyzer identity:
+  - `analyzer_name`;
+  - `analyzer_version`;
+  - `pattern_set_hash`;
+  - supported configuration keys and bounds.
+- Client may only choose artifacts and allowed configuration values.
 - Request body:
 
 ```json
 {
   "artifact_ids": ["optional-artifact-id"],
-  "analyzer_name": "static-cobol-mvp",
-  "analyzer_version": "0.1.0",
   "configuration": {
     "chunk_max_lines": 120,
     "chunk_overlap_lines": 20,
     "enabled_patterns": ["if_else", "evaluate_when", "sql"]
-  },
-  "force_retry_of_job_id": null
+  }
 }
 ```
 
-- Response: `201` for new job, `200` for existing succeeded idempotent job, or `409` for active duplicate.
+- Unknown configuration keys are rejected.
+- Unsupported pattern IDs are rejected.
+- Numeric configuration is clamped or rejected according to server min/max rules before canonical hashing.
+- Response: `201` for new job, `200` for existing succeeded request fingerprint, or `409` for active duplicate request/project job.
+- Response metadata includes server-owned analyzer identity and `request_fingerprint`.
+
+Retry failed/cancelled job:
+
+- `POST /api/v1/projects/{projectId}/analysis-jobs/{jobId}/retry`
+- Roles: `admin`, `analyst`.
+- Request body: `{}`.
+- The target job must belong to the project and have status `failed` or `cancelled`.
+- Server creates the next attempt with the same `request_fingerprint`, `attempt_no = previous max + 1`, and `retry_of_job_id = jobId`.
+- If any project job is active, response is HTTP `409`.
+- If the request fingerprint already has a succeeded attempt, response is HTTP `200` with the succeeded job/result.
 
 List jobs:
 
@@ -516,10 +616,18 @@ Rendering rules:
 Job creation transaction:
 
 - Validate project exists and is not archived.
+- Reject with HTTP `409` if any `queued` or `running` analysis job already exists for the project.
 - Validate project transition to `analyzing`.
 - Validate artifact IDs belong to project and have immutable SHA-256.
-- Create/reuse analyzer version.
+- Resolve server-owned analyzer name/version and pattern set hash.
+- Validate, clamp/reject, and canonicalize client configuration.
+- Create/reuse analyzer version using canonical configuration hash.
+- Compute `request_fingerprint`.
+- If the request fingerprint already has a succeeded job, return it without creating a new job or changing project state.
+- If the request fingerprint already has a queued/running job, return it or HTTP `409`.
+- If retrying a failed/cancelled request fingerprint, compute `attempt_no = previous max + 1` and set `retry_of_job_id`.
 - Create analysis job and job-artifact rows.
+- Store `previous_project_status` before changing project status; default to `ready_for_analysis` if missing.
 - Update selected artifacts to `queued`.
 - Update project to `analyzing`.
 - Record `ANALYSIS_STARTED`.
@@ -528,10 +636,13 @@ Job creation transaction:
 Worker success transaction:
 
 - Mark job `running`.
+- Confirm this is still the only active analysis job for the project.
 - Verify artifact SHA-256 before reading.
 - Create chunks, candidates, evidence, gaps, and questions.
 - Enforce candidate evidence invariant before commit.
-- Update artifact `analysis_status` and `candidate_count`.
+- Update artifact `analysis_status`.
+- Recalculate and update `source_artifacts.candidate_count` in the same transaction.
+- Do not persist `business_statements.evidence_count`; API evidence counts are computed.
 - Mark job `succeeded`.
 - Transition project to `review_in_progress`.
 - Record `ANALYSIS_COMPLETED`.
@@ -540,7 +651,9 @@ Worker success transaction:
 Worker failure transaction:
 
 - Roll back partial chunks/candidates/evidence for the failed attempt.
-- In a new transaction, mark job `failed`, artifact rows `analysis_failed`, and project according to the approved failure transition.
+- In a new transaction, mark job `failed`, artifact rows `analysis_failed`, and project back to `AnalysisJob.previous_project_status`.
+- Default project recovery target is `ready_for_analysis`.
+- Restore project status only after confirming no other active analysis job remains; the MVP active-job rule should make this true, but the check is still mandatory.
 - Record `ANALYSIS_FAILED_OR_CANCELLED` with safe failure code/message.
 - Preserve prior successful candidates from older jobs.
 
@@ -586,6 +699,11 @@ Migration:
 - Add `business_statements`.
 - Add `evidence`.
 - Add indexes and unique constraints listed in this contract.
+- Add DB check constraint on `evidence` so exactly one target FK is non-null.
+- Add unique `(project_id, request_fingerprint, attempt_no)` on `analysis_jobs`.
+- Add partial unique active-job indexes where supported:
+  - one active job per project;
+  - one active attempt per `(project_id, request_fingerprint)`.
 - Add an index on existing `source_artifacts(project_id, analysis_status)` if supported by the migration target.
 - Do not edit `0001_phase1_foundation` or `0002_phase2_source_ingestion`.
 
@@ -610,20 +728,29 @@ Unit tests:
 - Chunking deterministic for same artifact/config.
 - Chunk line ranges and overlap.
 - Candidate identity hash stability.
+- Candidate identity does not primarily depend on natural-language `statement_text`.
 - Evidence range validation.
 - Pattern tests for every static extractor rule in section 7.
 - Candidate without evidence is rejected.
 - Gap/question creation when evidence is insufficient.
+- Server-owned analyzer identity is used even when a client attempts to submit analyzer fields.
+- Unknown configuration keys and unsupported patterns are rejected.
 
 Integration tests:
 
 - Create analysis job from `ready_for_analysis`.
 - Project moves `ready_for_analysis -> analyzing -> review_in_progress`.
+- Concurrent job rejection when a project already has a queued/running job.
+- Two simultaneous create requests for the same project produce one job and one `409` or existing-job response.
 - Artifacts move through queued/analyzing/analyzed.
 - Candidate list and statement/evidence detail APIs.
 - Gaps/questions APIs.
 - RBAC and CSRF for job creation.
 - Audit events for analysis start/completion/failure.
+- Project status remains `analyzing` while the active job is queued/running.
+- Failed/cancelled job restores `previous_project_status`.
+- Every candidate, evidence, gap, and question stores `analysis_job_id`.
+- `created_by_kind` is `system` for worker-generated rows with nullable `created_by`.
 
 Migration tests:
 
@@ -631,6 +758,8 @@ Migration tests:
 - PostgreSQL Compose upgrade through `0003_phase3_static_extraction`.
 - Downgrade from `0003` to `0002` on disposable databases.
 - Unique constraints and indexes exist where portable.
+- Evidence exactly-one target check rejects invalid rows with zero or multiple target FKs.
+- Active-job partial unique indexes are verified on PostgreSQL and SQLite where supported, with application fallback tests.
 
 E2E tests:
 
@@ -638,21 +767,27 @@ E2E tests:
 
 Idempotency tests:
 
-- TC-02: same artifact hash plus analyzer version/config does not create duplicate candidates.
-- Active duplicate job returns conflict or existing active job.
-- Retry failed job creates linked retry without duplicating successful output.
+- TC-02: same artifact hash plus server-owned analyzer version/config does not create duplicate candidates.
+- Succeeded request fingerprint returns existing result without creating a new attempt.
+- Active duplicate request fingerprint returns conflict or existing active job.
+- Different request fingerprint still returns `409` while another project job is active.
+- Retry after failed/cancelled attempt creates `attempt_no + 1` with retry lineage.
+- Retry does not violate unique `(project_id, request_fingerprint, attempt_no)`.
 
 Provenance tests:
 
 - Evidence stores artifact SHA-256 and exact line range.
 - Evidence excerpt matches artifact content at extraction time.
-- Candidate links to analyzer version and source chunk.
+- Candidate links to analysis job, analyzer version, pattern ID, artifact, and source chunk.
+- Evidence, gap, and question link to analysis job.
+- `source_artifacts.candidate_count` reconciles with candidate query count after success and retry.
 
 Failure/retry tests:
 
 - Simulated extraction exception rolls back partial candidates.
 - Failure audit is recorded in a new transaction.
-- Project status is restored according to the approved failure transition.
+- Project status is restored to `previous_project_status`.
+- Project status cannot move out of `analyzing` while an active job remains.
 
 No-execution architectural test:
 
@@ -667,10 +802,17 @@ Phase 3 implementation acceptance:
 
 - All tables and indexes from this contract are implemented by a new migration.
 - API can create/list/get analysis jobs.
+- API does not accept client-supplied analyzer name/version/pattern set hash.
+- Server validates and canonicalizes configuration before creating/reusing analyzer version rows.
 - Static analysis runs asynchronously or through the worker boundary without blocking request processing.
+- Only one active analysis job per project is possible in MVP.
+- Retry uses shared `request_fingerprint` plus incrementing `attempt_no`.
 - At least one deterministic candidate is generated from the demo-style source fixture.
 - Every candidate has evidence with artifact hash and line range.
 - Missing evidence creates `AnalysisGap` or `UnresolvedQuestion`, not an evidence-less statement.
+- Every candidate, evidence, gap, and question links to `analysis_job_id`.
+- Evidence exactly-one target is enforced by a DB check constraint and application validation.
+- `source_artifacts.candidate_count` is transactionally maintained and covered by reconciliation tests.
 - TC-02 passes.
 - TC-12 line range validation passes.
 - TC-15 extraction no-execution portion passes.
@@ -680,13 +822,13 @@ Phase 3 implementation acceptance:
 
 ## 19. Open Questions Or Contradictions
 
-| ID | Question or contradiction | Proposed handling | Blocks implementation? |
+No blocking open question remains in this revised contract. Implementation remains blocked only by Architect `CLOSED_PASS_DESIGN`.
+
+| ID | Note | Locked handling | Blocks implementation? |
 |---|---|---|---|
-| P3-OPEN-001 | ADR-003 lacks explicit analysis failure/cancel transition. | Add `fail_or_cancel_analysis` to ADR-003 and domain state machine during Phase 3 implementation, unless Architect chooses another transition in design review. | Yes |
-| P3-OPEN-002 | Exact default static analyzer version naming is not yet locked. | Use `static-cobol-mvp` and `0.1.0` unless Architect requests a different convention. | No |
-| P3-OPEN-003 | SourceChunk stores full chunk text, duplicating immutable artifact excerpts. | Accept for MVP traceability and deterministic replay; revisit compression/storage in post-MVP if needed. | No |
-| P3-OPEN-004 | Evidence table needs targets for statements, gaps, and questions. | Use nullable FKs plus exactly-one-target check for relational integrity. | No |
-| P3-OPEN-005 | SQL parsing depth can expand toward compiler territory. | Keep SQL detection pattern-based and create questions/gaps for unknown semantics. | No |
+| P3-NOTE-001 | Default static analyzer identity needs a concrete implementation constant. | Server owns the identity; implementation should start with `static-cobol-mvp` and `0.1.0` unless Architect requests a naming change. | No |
+| P3-NOTE-002 | SourceChunk stores full chunk text, duplicating immutable artifact excerpts. | Accepted for MVP traceability and deterministic replay; revisit compression/storage post-MVP if needed. | No |
+| P3-NOTE-003 | SQL parsing depth can expand toward compiler territory. | Keep SQL detection pattern-based and create questions/gaps for unknown semantics. | No |
 
 ## 20. Architectural Invariants Affected
 
@@ -704,9 +846,15 @@ Affected and preserved:
 - AI adapter remains Phase 5 and cannot be smuggled into Phase 3.
 - No graph database, microservices, code translator, BIR runtime, or behavioral equivalence claim.
 - Alembic migration discipline remains: new migration only, no editing committed migrations.
+- Analyzer identity and pattern set provenance are server-owned.
+- MVP allows one active analysis job per project.
+- Retry identity uses `request_fingerprint` plus attempt lineage, not a reused unique idempotency key.
+- Analysis failure/cancel restores `previous_project_status` and audits `ANALYSIS_FAILED_OR_CANCELLED`.
+- Evidence target integrity is enforced by DB check constraint and application validation.
+- Candidate identity is provenance-based and does not primarily depend on natural-language statement text.
 
-Affected and requiring explicit design approval:
+Affected and locked by this revision:
 
-- ADR-003 needs an analysis failure/cancel transition before implementation can safely pass failure/retry tests.
+- ADR-003 must add `fail_or_cancel_analysis` with `analyzing -> previous_project_status` during Phase 3 implementation.
 - `SourceArtifact.analysis_status` gains additional controlled values while remaining a string column.
 - The frontend shifts from secure ingestion screen toward an operational analysis/candidate queue, but still uses the existing React/Vite app shell.

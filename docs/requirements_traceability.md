@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 2 secure source ingestion
-Status: Phase 2 PASS candidate for gate review.
+Status: CONDITIONAL - revision complete, Product Owner decision required.
 
 Sources:
 
@@ -55,9 +55,9 @@ Status legend:
 | REQ-032 | SRS Section 6 Principles; BA BR-010 | Project semantics are isolated. | No cross-customer/project facts; no fine-tuning on customer source. | Domain policy, AI Adapter; backend service boundaries | Phase 1/5 | Partially implemented | Phase 1 stores projects as scoped records and has no cross-project knowledge reuse; AI minimization remains Phase 5 |
 | REQ-033 | SRS Section 6 Principles; SRS Section 9 Statement types; BA Uncertainty model; BA BR-008, BR-014, BR-015, BR-016, BR-017 | Preserve exception, unknown, ambiguity, dead-code suspicion, obsolete-but-historic rules. | Rare statements are first-class; suspicion is not conclusion; historically valid statements are not erased. | Statement Service, Conflict, Review; statement detail UI | Phase 3/4/6 | Planned | Unknown/gap/conflict/obsolete metadata tests |
 | REQ-034 | SRS Section 6 Principles; BA BR-011, BR-018 | No industry best-practice normalization. | External templates are checklists/references only. | Domain policy, Glossary, AI prompt policy; review UI and AI adapter | Phase 3/5/6 | Planned | Negative auto-normalization tests and review checklist |
-| REQ-035 | SRS Section 15 Security; Handoff Security gates; BA Risk 5; BA BR-013 | Security controls include upload limit, CORS limits, login/AI rate limiting, secure sessions, password hashing, no source execution, HTML escaping, storage isolation. | All security gates must be tested. | Auth, Ingestion, Source Viewer, AI Adapter, Config | Phase 1/2/5/7 | Partially implemented | Phase 1 auth/session/CSRF/RBAC/CORS/password/rate-limit tests passed; Phase 2 upload limits, ZIP hardening, no execution, source escaping, and storage isolation passed; AI/export security remain later |
+| REQ-035 | SRS Section 15 Security; Handoff Security gates; BA Risk 5; BA BR-013 | Security controls include upload limit, CORS limits, login/AI rate limiting, secure sessions, password hashing, no source execution, HTML escaping, storage isolation. | All security gates must be tested. | Auth, Ingestion, Source Viewer, AI Adapter, Config | Phase 1/2/5/7 | Partially implemented | Phase 1 auth/session/CSRF/RBAC/CORS/password/rate-limit tests passed; Phase 2 bounded upload limit, ZIP hardening, no execution, source escaping, artifact integrity check, and storage isolation passed; AI/export security remain later |
 | REQ-036 | SRS Section 16 Observability; SRS Section 15 Security; BA Risk 5; BA BR-013 | Observability includes structured logs, request ID, job logs, health endpoint, no source content in production error logs. | Logs must not leak source by default. | Observability, API middleware, Worker; health endpoint | Phase 1/5 | Partially implemented | Health endpoint, worker health shell, request ID middleware; production log redaction remains Phase 5 |
-| REQ-037 | SRS Section 16 Performance; BA Product KPI; BA BR-016, BR-017 | Performance targets cover pagination, source view latency, upload progress, and async analysis. | MVP must avoid blocking analysis in request path. | API, UI, Worker; statement list, source viewer, upload UI, analysis jobs | Phase 2/3/7 | Partially implemented | Phase 2 upload limits and source viewer smoke covered; upload progress/pagination/async analysis remain later |
+| REQ-037 | SRS Section 16 Performance; BA Product KPI; BA BR-016, BR-017 | Performance targets cover pagination, source view latency, upload progress, and async analysis. | MVP must avoid blocking analysis in request path. | API, UI, Worker; statement list, source viewer, upload UI, analysis jobs | Phase 2/3/7 | Blocked/Clarify | Phase 2 bounded upload limit and source viewer smoke covered. SRS `Upload 100 MB có progress` awaits Product Owner decision: A implement 100 MB plus progress in Phase 2, or B keep 20 MB MVP limit and defer 100 MB/progress to Phase 7/post-MVP. |
 | REQ-038 | SRS Section 17 Architecture; SRS Section 18 Project structure; BA Section 20 Constraints; BA BR-010 | MVP runs with Docker Compose and PostgreSQL. | No cloud vendor dependency; local storage abstraction with S3-compatible interface. | DevOps, Infrastructure, Storage; `docker compose up`, `.env.example` | Phase 1 | Implemented | Compose config/build/start smoke; PostgreSQL Alembic migration passed |
 | REQ-039 | SRS Section 22 Definition of Done; BA Validation plan; BA BR-013 | README documents setup and demo. | DoD requires API docs and runnable increment. | Documentation; README and OpenAPI docs | Phase 1/7 | Implemented | README added; FastAPI OpenAPI available from running API |
 | REQ-040 | SRS Section 19 Acceptance; Handoff first vertical slice; BA Acceptance Criteria; BA BR-001 through BR-013 | First vertical slice reaches login -> project -> upload -> candidate -> evidence -> reviewer verify -> behavioral test -> JSON export. | Must include migration, API, UI, auth, audit, unit/integration/E2E tests. | Cross-module full UI/API path | Phase 1-7 | Partially implemented | Phase 1 E2E covers login -> create project -> project appears in list; Phase 2 E2E covers upload -> inventory -> escaped source viewer |
@@ -76,11 +76,11 @@ Status legend:
 | TC-08 | Conflict is preserved and system does not auto-select a winner. | REQ-025 | Phase 4/6 | Planned | Conflict workflow test |
 | TC-09 | Export reproducibility for unchanged logical data. | REQ-030, REQ-031 | Phase 7 | Planned | Deterministic export test |
 | TC-10 | Viewer cannot call review endpoint; returns 403. | REQ-002, REQ-021, REQ-035 | Phase 1/4 | Implemented | `test_viewer_cannot_create_project_or_call_review_endpoint` |
-| TC-11 | Artifact hash is preserved and used in evidence/export. | REQ-009, REQ-019, REQ-030 | Phase 2/7 | Partially implemented | Phase 2 artifact hash preservation covered by `test_tc01_text_upload_persists_immutable_inventory_and_escaped_viewer`; evidence/export usage remains Phase 4/7 |
+| TC-11 | Artifact hash is preserved and used in evidence/export. | REQ-009, REQ-019, REQ-030 | Phase 2/7 | Partially implemented | Phase 2 artifact hash preservation and viewer integrity check covered by `test_tc01_text_upload_persists_immutable_inventory_and_escaped_viewer` and `test_tampered_artifact_is_rejected_and_audited`; evidence/export usage remains Phase 4/7 |
 | TC-12 | Evidence line ranges are within artifact bounds. | REQ-019 | Phase 2/4 | Planned | Evidence range validation test |
 | TC-13 | Revision lineage exists when verified statement is revised/superseded. | REQ-023 | Phase 4 | Planned | Revision lineage test |
 | TC-14 | Review action creates ReviewDecision and AuditEvent. | REQ-024 | Phase 4 | Planned | Audit-on-review test |
-| TC-15 | Uploaded source is never executed. | REQ-006, REQ-008, REQ-011, REQ-035 | Phase 2/3 | Partially implemented | Ingestion portion covered by `test_unsupported_and_binary_entries_return_warnings_without_execution`; extractor runtime policy remains Phase 3 |
+| TC-15 | Uploaded source is never executed. | REQ-006, REQ-008, REQ-011, REQ-035 | Phase 2/3 | Partially implemented | Ingestion portion covered by `test_unsupported_and_binary_entries_return_warnings_without_execution` and `test_ingestion_module_has_no_dynamic_execution_paths`; extractor runtime policy remains Phase 3 |
 
 ## Phase 1 Mandatory E2E Gate
 
@@ -117,7 +117,8 @@ Result: passed in Phase 2 (`npm run test:e2e`, `2 passed` total).
 | Binary unsupported handling | REQ-007 | Ingestion classifier | Implemented in Phase 2 binary/unsupported warning regression |
 | Filename/storage isolation | REQ-008, REQ-035 | Storage service | Implemented in Phase 2 storage path regression |
 | HTML escaping source viewer | REQ-010, REQ-035 | API response/UI rendering | Implemented in Phase 2 API and Playwright source viewer tests |
-| Upload limit | REQ-035, REQ-037 | API config and reverse proxy/app limit | Implemented in Phase 2 configured upload-size gate |
+| Upload limit | REQ-035, REQ-037 | API bounded chunk reader and ingestion service defense-in-depth check | Implemented in Phase 2 oversized upload regression |
+| Artifact integrity verification | REQ-009, REQ-035 | Source viewer reads artifact bytes and checks SHA-256 before decoding | Implemented in Phase 2 tampered artifact regression |
 | No source execution | REQ-006, REQ-008, REQ-011, REQ-035 | Ingestion/extraction runtime policy | TC-15 ingestion portion implemented; extraction portion remains Phase 3 |
 | Password hashing | REQ-001, REQ-035 | Auth service | Hash verification unit test |
 | Viewer cannot review | REQ-002, REQ-021 | Backend RBAC | TC-10 |
@@ -138,6 +139,7 @@ Phase 2 coverage:
 - TC-01 is implemented.
 - TC-11 artifact hash preservation is implemented; evidence/export usage remains later.
 - TC-15 ingestion no-execution is implemented; extraction no-execution remains Phase 3.
+- REQ-037 is blocked/clarify because `Upload 100 MB có progress` needs Product Owner decision before Phase 2 can close.
 - REQ-035, REQ-036, REQ-032, REQ-037, and REQ-040 are partially implemented for their Phase 1/2 subsets.
 - REQ-038 and REQ-039 are implemented for Phase 1.
 - Extraction, evidence, review, AI, behavioral test, dashboard, and export requirements remain planned.

@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 2 - Secure source ingestion
-Status: Phase 2 PASS candidate for gate review; Phase 3 not started.
+Status: CONDITIONAL - revision complete, Product Owner decision required; Phase 3 not started.
 
 Source documents:
 
@@ -257,12 +257,17 @@ Implemented deliverables:
 - Source viewer UI with line numbers and safe HTML escaping.
 - Audit events for upload/ingest.
 
-Phase 2 acceptance evidence:
+Phase 2 revision evidence:
 
-- Python unit/integration tests: `23 passed`.
+- Python unit/integration tests: `30 passed`.
 - Playwright E2E: `2 passed`, including upload -> inventory -> escaped source viewer.
 - Alembic migration `0002_phase2_source_ingestion` passed on SQLite and PostgreSQL via Compose.
 - Docker Compose API, worker, and web rebuilt and started.
+
+Phase 2 cannot close as `CLOSED_PASS` until Product Owner chooses how to handle SRS `Upload 100 MB có progress`:
+
+- Option A: implement 100 MB upload support plus progress in Phase 2.
+- Option B: keep MVP default upload limit at 20 MB and formally defer 100 MB/progress to Phase 7 or post-MVP.
 
 ### Phase 3 - Static extraction
 

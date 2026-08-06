@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 2 secure source ingestion
-Status: Phase 2 PASS candidate for gate review.
+Status: CONDITIONAL - revision complete, Product Owner decision required.
 
 ## Locked Principles
 
@@ -63,10 +63,13 @@ These are not assumptions and must not be weakened during MVP delivery:
 | DEC-020 | Content sniffing rejects NUL bytes and high-control-byte samples as binary-looking content before text decoding. | Accepted | Binary-looking allowed-extension files produce warnings and are not stored as source artifacts. |
 | DEC-021 | ZIP validation rejects path traversal, absolute paths, Windows-drive-style paths, symlinks, nested archive extensions, duplicate normalized paths, encrypted entries, and decompression limit violations before any artifact write. | Accepted | Unsafe ZIPs leave no source artifacts and restore project state to the previous stable state. |
 | DEC-022 | Source viewer receives API-escaped source lines and renders them as escaped HTML with line numbers. | Accepted | Uploaded source remains untrusted and cannot become executable UI markup. |
+| DEC-023 | Upload reads are bounded by chunk and stop when `MAX_UPLOAD_BYTES` is exceeded. | Accepted | Oversized uploads do not proceed into parsing/storage and receive failure audit. |
+| DEC-024 | Artifact content is integrity-checked by SHA-256 before source viewer decode. | Accepted | Tampered artifact files are rejected and audited as `ARTIFACT_INTEGRITY_MISMATCH`. |
+| DEC-025 | Encoding detection checks `cp932` and `shift_jis` before `cp1252` and `latin-1`; Latin-1 fallback is low confidence. | Accepted | Legacy Japanese source is identified more accurately, and Latin-1 fallback creates a warning. |
 
 ## Requirement Conflicts Or Tensions
 
-| ID | Issue | Locked Phase 0 resolution | Blocking Phase 1? |
+| ID | Issue | Locked Phase 0 resolution | Blocking current phase? |
 |---|---|---|---|
 | CLAR-001 | SRS required evidence for candidate statements while BA allowed candidate without evidence as `unknown_behavior`. | Every `BusinessStatement` must have at least one evidence reference. If the analyst knows there is an unresolved area but cannot create a valid evidence-backed statement, use `AnalysisGap` or `UnresolvedQuestion`. `unknown_behavior`, if used as a statement type, must still link to evidence showing unresolved behavior. | No |
 | CLAR-002 | Technical review and business review were described, but MVP has one `reviewer` role. | MVP uses one `reviewer` role. A single valid reviewer decision can verify. Every decision must include `review_context`: `technical`, `business`, or `combined`. Review decisions should support `confidence_source` when available. Export includes review context and should include confidence source. No two-stage approval gate in MVP. | No |
@@ -127,7 +130,7 @@ This is metadata, not a new statement state.
 
 ## Requirements That Are Not Yet Fully Testable
 
-| ID | Requirement | Testability gap | Proposed action | Blocking Phase 1? |
+| ID | Requirement | Testability gap | Proposed action | Blocking current phase? |
 |---|---|---|---|---|
 | NT-001 | No best-practice normalization. | Hard to prove absence globally. | Add negative tests for known auto-normalization paths and keep review checklist/manual audit. | No |
 | NT-002 | Candidate statement is readable. | Readability is subjective. | Use schema validation plus reviewer feedback; avoid treating it as automated pass/fail. | No |
@@ -140,7 +143,7 @@ This is metadata, not a new statement state.
 
 ## Security Gates
 
-| ID | Gap or gate | Decision/status | Blocking Phase 1? |
+| ID | Gap or gate | Decision/status | Blocking current phase? |
 |---|---|---|---|
 | SEC-GATE-001 | CSRF strategy if cookie sessions are used. | Resolved in ADR-002: CSRF token required for state-changing requests. | No |
 | SEC-GATE-002 | Session cookie flags and invalidation behavior. | Resolved in ADR-002: HTTP-only, `SameSite=Lax`, environment-specific `Secure`, server-side invalidation. | No |
@@ -173,11 +176,11 @@ This is metadata, not a new statement state.
 | ID | Assumption | Phase affected | Status / blocking impact |
 |---|---|---|---|
 | OPEN-001 | Exact ZIP scanner numeric limits for entry count, path length, nesting, and decompression ratio. | Phase 2 | Resolved in DEC-019. |
-| OPEN-002 | Exact upload progress implementation details for 100 MB local upload. | Phase 2/7 | No |
+| OPEN-002 | Product decision for SRS `Upload 100 MB có progress`. | Phase 2/7 | Blocking Phase 2 `CLOSED_PASS`. Product Owner must choose A: implement 100 MB plus progress in Phase 2, or B: keep MVP default 20 MB and formally defer 100 MB/progress to Phase 7 or post-MVP. |
 | OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
 | OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
 
-Phase 2 blocking assumptions: none.
+Phase 2 blocking assumption: OPEN-002.
 
 ## Assumption Update Rule
 

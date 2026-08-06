@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import stat
@@ -9,8 +10,11 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+import apps.api.app.ingestion as ingestion_module
 from apps.api.app.config import Settings
+from apps.api.app.ingestion import IngestionRejectedError
 from apps.api.app.main import create_app
+from apps.api.app.routers.artifacts import read_upload_bounded
 from tests.conftest import create_user, login
 
 
@@ -109,6 +113,60 @@ def test_tc01_zip_path_traversal_is_blocked_without_artifacts(client: TestClient
     ]
 
 
+def test_oversized_upload_is_rejected_with_restore_and_failure_audit() -> None:
+    runtime_dir = Path("runtime-tests")
+    runtime_dir.mkdir(exist_ok=True)
+    settings = Settings(
+        app_env="test",
+        database_url=f"sqlite:///{runtime_dir / f'oversized-{uuid4()}.db'}",
+        cookie_secure=False,
+        auto_create_db=True,
+        artifact_storage_root=str(runtime_dir / f"artifacts-{uuid4()}"),
+        max_upload_bytes=8,
+    )
+    app = create_app(settings)
+    with TestClient(app) as client:
+        create_user(client, "analyst@example.com", "password", "analyst")
+        csrf_token = login(client, "analyst@example.com", "password")
+        project = _create_project(client, csrf_token)
+
+        response = _upload(client, project["id"], csrf_token, "too-large.cbl", b"123456789")
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Upload exceeds the configured size limit."
+        assert client.get(f"/api/v1/projects/{project['id']}/artifacts").json() == []
+        assert client.get(f"/api/v1/projects/{project['id']}").json()["status"] == "draft"
+        audit = client.get(f"/api/v1/projects/{project['id']}/audit-events").json()
+        assert [event["event_type"] for event in audit] == [
+            "PROJECT_CREATED",
+            "SOURCE_UPLOAD_ACCEPTED",
+            "INGESTION_FAILED_OR_CANCELLED",
+        ]
+        assert audit[-1]["payload"]["code"] == "upload_too_large"
+
+
+def test_bounded_upload_reader_stops_after_limit_without_consuming_remaining_chunks() -> None:
+    class ChunkedUpload:
+        def __init__(self) -> None:
+            self.chunks = [b"1234", b"5678", b"should-not-be-read"]
+            self.read_calls = 0
+
+        async def read(self, size: int) -> bytes:
+            assert size == 4
+            self.read_calls += 1
+            return self.chunks.pop(0) if self.chunks else b""
+
+    upload = ChunkedUpload()
+
+    try:
+        asyncio.run(read_upload_bounded(upload, max_bytes=5, chunk_size=4))  # type: ignore[arg-type]
+        raise AssertionError("oversized upload should be rejected")
+    except IngestionRejectedError as exc:
+        assert exc.code == "upload_too_large"
+        assert upload.read_calls == 2
+        assert upload.chunks == [b"should-not-be-read"]
+
+
 def test_tc11_zip_symlink_nested_archive_and_decompression_limits_are_blocked(client: TestClient) -> None:
     create_user(client, "analyst@example.com", "password", "analyst")
     csrf_token = login(client, "analyst@example.com", "password")
@@ -195,3 +253,87 @@ def test_unsupported_and_binary_entries_return_warnings_without_execution(client
         f"/api/v1/projects/{project['id']}/artifacts/{payload['artifacts'][0]['id']}/content"
     )
     assert "Write-Output hacked" in viewer.json()["lines"][0]["escaped_html"]
+
+
+def test_filesystem_failure_cleans_partial_artifact_restores_status_and_audits(monkeypatch) -> None:
+    runtime_dir = Path("runtime-tests")
+    runtime_dir.mkdir(exist_ok=True)
+    settings = Settings(
+        app_env="test",
+        database_url=f"sqlite:///{runtime_dir / f'fs-failure-{uuid4()}.db'}",
+        cookie_secure=False,
+        auto_create_db=True,
+        artifact_storage_root=str(runtime_dir / f"artifacts-{uuid4()}"),
+    )
+    app = create_app(settings)
+    created_paths: list[Path] = []
+
+    def failing_write(settings: Settings, storage_path: str, content: bytes) -> None:
+        target = ingestion_module.artifact_absolute_path(settings, storage_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        created_paths.append(target)
+        raise OSError("simulated disk failure")
+
+    monkeypatch.setattr(ingestion_module, "write_immutable_artifact", failing_write)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        create_user(client, "analyst@example.com", "password", "analyst")
+        csrf_token = login(client, "analyst@example.com", "password")
+        project = _create_project(client, csrf_token)
+
+        response = _upload(client, project["id"], csrf_token, "partial.cbl", b"IDENTIFICATION DIVISION.\n")
+
+        assert response.status_code == 500
+        assert client.get(f"/api/v1/projects/{project['id']}").json()["status"] == "draft"
+        assert client.get(f"/api/v1/projects/{project['id']}/artifacts").json() == []
+        assert created_paths and all(not path.exists() for path in created_paths)
+        audit = client.get(f"/api/v1/projects/{project['id']}/audit-events").json()
+        assert audit[-1]["event_type"] == "INGESTION_FAILED_OR_CANCELLED"
+        assert audit[-1]["payload"]["code"] == "ingestion_persistence_failed"
+
+
+def test_tampered_artifact_is_rejected_and_audited(client: TestClient) -> None:
+    create_user(client, "analyst@example.com", "password", "analyst")
+    csrf_token = login(client, "analyst@example.com", "password")
+    project = _create_project(client, csrf_token)
+    response = _upload(client, project["id"], csrf_token, "stable.cbl", b"IDENTIFICATION DIVISION.\n")
+    assert response.status_code == 200, response.text
+    artifact = response.json()["artifacts"][0]
+    storage_root = Path(client.app.state.settings.artifact_storage_root).resolve()
+    (storage_root / artifact["storage_path"]).write_bytes(b"TAMPERED\n")
+
+    viewer = client.get(f"/api/v1/projects/{project['id']}/artifacts/{artifact['id']}/content")
+
+    assert viewer.status_code == 409
+    assert viewer.json()["detail"] == "Artifact integrity check failed."
+    audit = client.get(f"/api/v1/projects/{project['id']}/audit-events").json()
+    assert audit[-1]["event_type"] == "ARTIFACT_INTEGRITY_MISMATCH"
+    assert audit[-1]["payload"]["artifact_id"] == artifact["id"]
+
+
+def test_cp932_source_upload_records_legacy_japanese_encoding(client: TestClient) -> None:
+    create_user(client, "analyst@example.com", "password", "analyst")
+    csrf_token = login(client, "analyst@example.com", "password")
+    project = _create_project(client, csrf_token)
+    source_text = "部署コード=東京\n"
+    response = _upload(client, project["id"], csrf_token, "japanese.txt", source_text.encode("cp932"))
+
+    assert response.status_code == 200, response.text
+    artifact = response.json()["artifacts"][0]
+    assert artifact["encoding"] == "cp932"
+    viewer = client.get(f"/api/v1/projects/{project['id']}/artifacts/{artifact['id']}/content")
+    assert viewer.json()["lines"][0]["escaped_html"] == "部署コード=東京"
+
+
+def test_latin1_fallback_creates_low_confidence_encoding_warning(client: TestClient) -> None:
+    create_user(client, "analyst@example.com", "password", "analyst")
+    csrf_token = login(client, "analyst@example.com", "password")
+    project = _create_project(client, csrf_token)
+    response = _upload(client, project["id"], csrf_token, "fallback.txt", b"FIELD-\x81\n")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["artifacts"][0]["encoding"] == "latin-1"
+    assert [warning["warning_code"] for warning in payload["warnings"]] == ["encoding_low_confidence"]
+    assert payload["warnings"][0]["artifact_id"] == payload["artifacts"][0]["id"]

@@ -15,7 +15,7 @@ from apps.api.app.audit import record_audit_event
 from apps.api.app.config import Settings
 from apps.api.app.models import IngestionWarning, Project, SourceArtifact, new_uuid
 from apps.api.app.time import utc_now
-from packages.domain.project_state import ProjectStateError, assert_project_transition
+from packages.domain.project_state import assert_project_transition
 
 ALLOWED_SOURCE_EXTENSIONS = {
     ".cbl",
@@ -30,7 +30,7 @@ ALLOWED_SOURCE_EXTENSIONS = {
     ".yml",
 }
 ARCHIVE_EXTENSIONS = {".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz", ".7z", ".rar"}
-TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp1252", "latin-1")
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp932", "shift_jis", "cp1252", "latin-1")
 CONTROL_BYTES = set(range(0, 9)) | {11, 12} | set(range(14, 32))
 
 
@@ -39,6 +39,16 @@ class IngestionRejectedError(ValueError):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class ArtifactIntegrityError(IngestionRejectedError):
+    def __init__(self, expected_sha256: str, actual_sha256: str) -> None:
+        super().__init__(
+            "artifact_integrity_mismatch",
+            "Artifact integrity check failed.",
+        )
+        self.expected_sha256 = expected_sha256
+        self.actual_sha256 = actual_sha256
 
 
 @dataclass(frozen=True)
@@ -50,6 +60,7 @@ class ParsedArtifact:
     sha256: str
     encoding: str
     line_count: int
+    warnings: list[ParsedWarning]
 
 
 @dataclass(frozen=True)
@@ -170,8 +181,8 @@ def ingest_source_upload(
         for parsed_artifact in parsed.artifacts:
             artifact_id = new_uuid()
             storage_path = f"{project.id}/{artifact_id}.source"
-            write_immutable_artifact(settings, storage_path, parsed_artifact.content)
             written_paths.append(storage_path)
+            write_immutable_artifact(settings, storage_path, parsed_artifact.content)
             artifact = SourceArtifact(
                 id=artifact_id,
                 project_id=project.id,
@@ -188,6 +199,17 @@ def ingest_source_upload(
             )
             db.add(artifact)
             artifact_rows.append(artifact)
+            for warning in parsed_artifact.warnings:
+                warning_row = IngestionWarning(
+                    project_id=project.id,
+                    artifact_id=artifact.id,
+                    original_path=warning.original_path,
+                    warning_code=warning.warning_code,
+                    message=warning.message,
+                    created_by=actor_user_id,
+                )
+                db.add(warning_row)
+                warning_rows.append(warning_row)
 
         assert_project_transition("ingesting", "ready_for_analysis", "system", "complete_ingestion")
         project.status = "ready_for_analysis"
@@ -206,12 +228,64 @@ def ingest_source_upload(
         )
         db.flush()
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
         _remove_uncommitted_artifacts(settings, written_paths)
+        _record_persistence_failure(
+            db,
+            project_id=project.id,
+            previous_status=previous_status,
+            actor_user_id=actor_user_id,
+            request_id=request_id,
+            code="ingestion_persistence_failed",
+            message=exc.__class__.__name__,
+        )
         raise
 
     return IngestionResult(project=project, artifacts=artifact_rows, warnings=warning_rows)
+
+
+def record_rejected_upload(
+    db: Session,
+    project: Project,
+    *,
+    upload_filename: str | None,
+    actor_user_id: str,
+    actor_role: str,
+    request_id: str | None,
+    error: IngestionRejectedError,
+    observed_size_bytes: int | None = None,
+) -> None:
+    previous_status = project.status
+    assert_project_transition(previous_status, "ingesting", actor_role, "accept_source_upload")
+    project.status = "ingesting"
+    project.updated_at = utc_now()
+    record_audit_event(
+        db,
+        "SOURCE_UPLOAD_ACCEPTED",
+        actor_user_id=actor_user_id,
+        project_id=project.id,
+        request_id=request_id,
+        payload={
+            "filename": upload_filename,
+            "previous_status": previous_status,
+            "size_bytes": observed_size_bytes,
+        },
+    )
+    _restore_previous_status(project, previous_status)
+    record_audit_event(
+        db,
+        "INGESTION_FAILED_OR_CANCELLED",
+        actor_user_id=actor_user_id,
+        project_id=project.id,
+        request_id=request_id,
+        payload={
+            "code": error.code,
+            "message": error.message,
+            "previous_status": previous_status,
+        },
+    )
+    db.commit()
 
 
 def artifact_absolute_path(settings: Settings, storage_path: str) -> Path:
@@ -234,6 +308,9 @@ def write_immutable_artifact(settings: Settings, storage_path: str, content: byt
 
 def read_artifact_text(artifact: SourceArtifact, settings: Settings) -> str:
     content = artifact_absolute_path(settings, artifact.storage_path).read_bytes()
+    actual_sha256 = hashlib.sha256(content).hexdigest()
+    if actual_sha256 != artifact.sha256:
+        raise ArtifactIntegrityError(artifact.sha256, actual_sha256)
     return content.decode(artifact.encoding)
 
 
@@ -256,6 +333,38 @@ def _remove_uncommitted_artifacts(settings: Settings, storage_paths: list[str]) 
             artifact_absolute_path(settings, storage_path).unlink(missing_ok=True)
         except OSError:
             continue
+
+
+def _record_persistence_failure(
+    db: Session,
+    *,
+    project_id: str,
+    previous_status: str,
+    actor_user_id: str,
+    request_id: str | None,
+    code: str,
+    message: str,
+) -> None:
+    try:
+        project = db.get(Project, project_id)
+        if project is not None and project.status != "archived":
+            project.status = previous_status
+            project.updated_at = utc_now()
+        record_audit_event(
+            db,
+            "INGESTION_FAILED_OR_CANCELLED",
+            actor_user_id=actor_user_id,
+            project_id=project_id,
+            request_id=request_id,
+            payload={
+                "code": code,
+                "message": message,
+                "previous_status": previous_status,
+            },
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 def _parse_single_file(
@@ -397,6 +506,15 @@ def _build_text_artifact(
         )
 
     encoding, text = _decode_text(content)
+    warnings: list[ParsedWarning] = []
+    if encoding == "latin-1":
+        warnings.append(
+            ParsedWarning(
+                original_path=original_path,
+                warning_code="encoding_low_confidence",
+                message="Source decoded with Latin-1 fallback; encoding should be reviewed.",
+            )
+        )
     return ParsedArtifact(
         original_path=original_path,
         content=content,
@@ -405,6 +523,7 @@ def _build_text_artifact(
         sha256=hashlib.sha256(content).hexdigest(),
         encoding=encoding,
         line_count=_line_count(text),
+        warnings=warnings,
     ), None
 
 

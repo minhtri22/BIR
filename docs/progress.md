@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Current phase: Phase 2 - Secure Source Ingestion
-Status: PASS candidate for gate review
+Status: CONDITIONAL - revision complete, Product Owner decision required
 
 ## Phase 0
 
@@ -73,6 +73,13 @@ Implemented:
 - Audit events for `SOURCE_UPLOAD_ACCEPTED`, `INGESTION_COMPLETED`, and `INGESTION_FAILED_OR_CANCELLED`.
 - Compose artifact storage volume at `/app/runtime-artifacts`.
 - Phase 2 Playwright E2E for upload -> inventory -> escaped source viewer.
+- Revision: bounded chunk upload reads stop when `MAX_UPLOAD_BYTES` is exceeded.
+- Revision: oversized upload restores project status, creates no artifact, and writes failure audit.
+- Revision: filesystem/persistence failures clean partially written files and write best-effort failure audit in a new transaction when the database is available.
+- Revision: source viewer verifies stored artifact SHA-256 before decoding and audits integrity mismatch.
+- Revision: legacy Japanese encodings `cp932` and `shift_jis` are checked before Western fallback encodings.
+- Revision: Latin-1 fallback creates an `encoding_low_confidence` warning.
+- Revision: architectural security test checks ingestion does not import/call dynamic execution paths.
 
 No Phase 3 extraction, candidate generation, evidence model, review workflow, AI adapter, behavioral tests, or export implementation was added.
 
@@ -112,7 +119,7 @@ Detailed test evidence is recorded in `docs/phase1_test_report.md` and `docs/pha
 
 Summary:
 
-- Python unit/integration tests: `23 passed`
+- Python unit/integration tests: `30 passed`
 - Frontend TypeScript/Vite build: passed
 - Playwright E2E: `2 passed`
 - Alembic SQLite migration: passed through `0002_phase2_source_ingestion`
@@ -146,6 +153,7 @@ Phase 2 implemented or partially implemented:
 - REQ-009 immutable artifact inventory metadata.
 - REQ-010 source viewer line numbers and escaping; evidence highlighting remains later.
 - REQ-035 ingestion/source-viewer security subset.
+- REQ-037 upload-size enforcement subset; 100 MB + progress remains a blocking Product Owner decision.
 - REQ-040 third vertical-slice step: upload one source file.
 
 ## Known Limitations
@@ -154,7 +162,9 @@ Phase 2 implemented or partially implemented:
 - PostgreSQL host port is `55432` to avoid an existing local port `5432` collision; Compose services still use `db:5432`.
 - Full review workflow endpoint is only an RBAC-protected Phase 1 stub; implementation starts in Phase 4.
 - Extraction, evidence persistence, AI adapter, behavioral tests, dashboard, and export remain later phases.
-- Upload progress UI is minimal; progress bars/resumable upload are deferred.
+- The SRS requirement `Upload 100 MB có progress` is not closed. Product Owner must choose either:
+  - Option A: implement 100 MB upload support plus progress in Phase 2.
+  - Option B: keep MVP default upload limit at 20 MB and formally defer 100 MB/progress to Phase 7 or post-MVP.
 - Evidence/export usage of artifact hashes remains deferred until evidence and export models exist.
 - `npm install` reports development-tool advisories, but `npm audit --omit=dev` reports zero production vulnerabilities.
 
@@ -162,11 +172,11 @@ Phase 2 implemented or partially implemented:
 
 Open assumptions remain in `docs/assumptions.md`.
 
-Phase 2 blocking assumptions: none. ZIP scanner numeric limits and content sniffing policy were locked in Phase 2 implementation.
+Phase 2 blocking assumption: Product Owner decision is required for `Upload 100 MB có progress`; Phase 2 must not be marked `CLOSED_PASS` until that is locked.
 
 ## Next Phase
 
-Phase 3 - Static extraction:
+Phase 3 - Static extraction, blocked until Phase 2 gate review:
 
 - Source chunking and deterministic static extractor.
 - Analyzer versioning and idempotency by artifact hash plus analyzer version.

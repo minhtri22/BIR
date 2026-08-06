@@ -1,0 +1,95 @@
+# Business Forensics Platform
+
+Phase 1 foundation for the Business Forensics Platform MVP.
+
+## Stack
+
+- Python 3.12
+- FastAPI, Pydantic v2, SQLAlchemy 2, Alembic
+- PostgreSQL 16
+- Redis and Dramatiq worker shell
+- React, TypeScript strict, Vite
+- pytest and Playwright
+- Docker Compose
+
+## Local Python Setup
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\python -m pip install -r requirements.lock
+```
+
+Run API with SQLite for quick local development:
+
+```powershell
+$env:APP_ENV = "development"
+$env:AUTO_CREATE_DB = "true"
+$env:DATABASE_URL = "sqlite:///./test-tmp/app.db"
+$env:DEV_SEED_EMAIL = "admin@example.com"
+$env:DEV_SEED_PASSWORD = "<set a local password>"
+.\.venv\Scripts\python -m uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8000
+```
+
+## Local Web Setup
+
+```powershell
+npm install
+npm run web:dev
+```
+
+The web app runs at `http://127.0.0.1:5173`.
+
+## Docker Compose
+
+Set a local seed password before starting the stack:
+
+```powershell
+$env:DEV_SEED_PASSWORD = "<set a local password>"
+docker compose up --build
+```
+
+API health:
+
+```powershell
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+## Tests
+
+Python unit and integration tests:
+
+```powershell
+.\.venv\Scripts\python -m pytest
+```
+
+Frontend type/build check:
+
+```powershell
+npm run web:build
+```
+
+Mandatory Phase 1 E2E:
+
+```powershell
+npm run test:e2e
+```
+
+Phase 1 cannot be marked `PASS` unless the Playwright flow `login -> create project -> project appears in list` passes.
+
+## Phase 1 Scope
+
+Implemented foundation behavior:
+
+- Opaque server-side sessions in HTTP-only cookies.
+- CSRF protection for state-changing requests.
+- Development seed user only under `APP_ENV=development`.
+- Generic login errors and login rate limiting.
+- Backend RBAC roles: `admin`, `analyst`, `reviewer`, `viewer`.
+- Project create/list/get/update/archive.
+- Project `PATCH` does not accept arbitrary `status`.
+- Archive is irreversible and archived projects are read-only.
+- Audit events for login/logout and project create/update/archive.
+- API and worker health endpoints.
+
+Physical project deletion, source upload, extraction, review workflow, AI adapter, behavioral tests, and export remain later phases.

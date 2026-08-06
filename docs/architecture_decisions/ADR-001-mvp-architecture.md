@@ -20,6 +20,8 @@ The audited repository has no existing implementation, so the architecture can b
 
 ADR-002 locks the Phase 1 browser auth/session/CSRF design. This ADR delegates those details to ADR-002 rather than leaving cookie-versus-JWT behavior open.
 
+ADR-003 promotes the project lifecycle from planning text into an accepted business contract for implementation and tests.
+
 ## Decision
 
 Use a modular monolith with REST API, background worker, relational persistence, and a provider-independent AI adapter boundary.
@@ -78,7 +80,7 @@ Domain rules:
 
 - Statement, evidence, review, project, conflict, and behavioral-test state transitions live in the domain/application layer.
 - Controllers call services and cannot own business transitions.
-- Project state transitions must follow the locked transition table in `docs/implementation_plan.md`.
+- Project state transitions must follow ADR-003 and the domain implementation in `packages/domain/project_state.py`.
 - Review transitions must create `ReviewDecision` and `AuditEvent` for important changes.
 - Verification requires reviewer permission and valid evidence.
 
@@ -147,6 +149,7 @@ Phase 1 must establish:
 - Domain/service/controller separation.
 - Initial migration and audit foundation.
 - RBAC, session, CSRF, and auth tests per ADR-002.
+- Project state tests per ADR-003.
 - Health and Docker Compose smoke tests.
 
 Later phases must add regression tests for:

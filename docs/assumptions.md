@@ -58,7 +58,7 @@ These are not assumptions and must not be weakened during MVP delivery:
 | ID | Issue | Locked Phase 0 resolution | Blocking Phase 1? |
 |---|---|---|---|
 | CLAR-001 | SRS required evidence for candidate statements while BA allowed candidate without evidence as `unknown_behavior`. | Every `BusinessStatement` must have at least one evidence reference. If the analyst knows there is an unresolved area but cannot create a valid evidence-backed statement, use `AnalysisGap` or `UnresolvedQuestion`. `unknown_behavior`, if used as a statement type, must still link to evidence showing unresolved behavior. | No |
-| CLAR-002 | Technical review and business review were described, but MVP has one `reviewer` role. | MVP uses one `reviewer` role. A single valid reviewer decision can verify. Every decision must include `review_context`: `technical`, `business`, or `combined`. Export includes review context. No two-stage approval gate in MVP. | No |
+| CLAR-002 | Technical review and business review were described, but MVP has one `reviewer` role. | MVP uses one `reviewer` role. A single valid reviewer decision can verify. Every decision must include `review_context`: `technical`, `business`, or `combined`. Review decisions should support `confidence_source` when available. Export includes review context and should include confidence source. No two-stage approval gate in MVP. | No |
 | CLAR-003 | `merge_candidates` could conflict with no auto-merge and contradiction preservation. | Manual merge creates a new candidate or statement revision. Source candidates are not deleted; they become `superseded`; lineage and evidence links are preserved. Merge is blocked when unresolved scope conflict remains. | No |
 | CLAR-004 | SRS says one behavioral test per verified rule, while BA export readiness allows documented exceptions. | Export readiness requires each verified rule to have either a linked behavioral test or documented exception/warning. | No |
 | CLAR-005 | Secure session mechanism was undecided. | Resolved by ADR-002: opaque server-side session, HTTP-only cookie, CSRF, timeouts, server-side invalidation. | No |
@@ -84,8 +84,10 @@ Review:
 
 - One `reviewer` role is used in MVP.
 - `review_context` is required with values `technical`, `business`, or `combined`.
+- `confidence_source` should be stored as a list when available, with values such as `source_code`, `sme_interview`, `operating_manual`, `database`, or `runtime_log`.
 - One valid reviewer decision is sufficient to verify in MVP.
 - Export must include the review context.
+- Export should include `confidence_source` when review decisions provide it.
 
 Merge:
 

@@ -345,8 +345,10 @@ Review semantics:
 - MVP has one `reviewer` role.
 - A valid reviewer decision can verify a statement in MVP.
 - Every review decision must include `review_context`: `technical`, `business`, or `combined`.
+- Every review decision should also support `confidence_source` as a list of provenance categories such as `source_code`, `sme_interview`, `operating_manual`, `database`, or `runtime_log`.
 - A user who has the reviewer role and sufficient domain context may record `combined`.
 - Export must include the review context used for each verified statement.
+- Export should include `confidence_source` when review decisions provide it.
 - MVP does not implement a two-stage approval gate.
 
 Manual merge semantics:

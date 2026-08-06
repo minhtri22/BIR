@@ -1,135 +1,123 @@
 # Project Progress
 
-Date: 2026-08-05
-Current phase: Phase 0 - Audit, plan, and revision gate
-Status: Conditional revision complete; Phase 1 is not started and remains blocked until user review approves Phase 0.
+Date: 2026-08-06
+Current phase: Phase 1 - Foundation
+Status: PASS
 
-## Phase 0 Summary
+## Phase 0
 
-Completed in the original Phase 0 baseline:
+Closed status:
 
-- Read all required input documents.
-- Audited repository structure and local toolchain.
-- Created implementation plan.
-- Created requirements traceability matrix.
-- Created assumptions, open questions, security gaps, and scope-risk register.
-- Created ADR-001 for MVP architecture.
-- Initialized Git for per-phase commit control.
+- `PHASE 0 - CLOSED_PASS`
+- Baseline commit: `da2b7dc docs: complete phase 0 audit and planning`
+- Revision commit: `e5ce32a docs: complete phase 0 planning and architecture baseline`
+- Working tree was clean before Phase 1 started.
 
-Completed in this Phase 0 revision:
+## Phase 1 Summary
 
-- Added Git evidence for the existing Phase 0 baseline commit.
-- Locked the project state machine before Phase 1.
-- Locked auth/session/CSRF in ADR-002.
-- Resolved CLAR-001: every `BusinessStatement` requires evidence; use `AnalysisGap` or `UnresolvedQuestion` when evidence is not sufficient.
-- Corrected TC-15 traceability so it no longer maps to REQ-023.
-- Expanded traceability with Source reference, Planned phase, Status, and Acceptance evidence columns.
-- Made Phase 1 Playwright E2E mandatory for login -> create project -> project appears in list.
-- Locked review context semantics.
-- Locked manual merge semantics.
-- Locked obsolete/historic validity representation.
-- Locked UI language, physical deletion deferral, and mock-AI-provider requirements.
-- Added semantic review checklist to the Phase 0 test report.
-- Updated ADR-001 where affected by ADR-002, project state machine, and dependency/migration policy.
+Implemented:
 
-Repository audit:
+- Modular monolith project scaffold under `apps/`, `packages/`, `migrations/`, and `tests/`.
+- Python 3.12 FastAPI backend with Pydantic v2, SQLAlchemy 2, Alembic, and pytest.
+- React + TypeScript strict + Vite frontend.
+- PostgreSQL 16 + Redis + API + worker + web Docker Compose stack.
+- Dramatiq/Redis worker shell.
+- Opaque server-side session IDs in HTTP-only cookies.
+- Pre-login CSRF nonce and session CSRF token validation for state-changing requests.
+- Server-side session invalidation on logout.
+- Idle and absolute session timeout enforcement.
+- Development seed user only when `APP_ENV=development`; seed password comes from environment.
+- Generic login failure response.
+- Login rate limit by IP and account identifier hash.
+- Backend RBAC roles: `admin`, `analyst`, `reviewer`, `viewer`.
+- Project create/list/get/update/archive API.
+- Project `PATCH` metadata updates only; arbitrary `status` mutation is rejected.
+- Archive is irreversible in MVP; archived projects are read-only.
+- Audit events for login/logout and project create/update/archive.
+- Health endpoints for API and worker shell readiness.
+- Minimal frontend login/project create/list UI.
+- Mandatory Playwright E2E: login -> create project -> project appears in list.
+- ADR-003 for project state machine as a business contract.
+- README and CI workflow.
 
-- Existing repository content before Phase 0: `docs/` only.
-- Application implementation code before Phase 0: none.
-- Application implementation code after this revision: none.
-- Package/tooling manifests before Phase 0: none.
-- Docker Compose before Phase 0: absent.
-- Test suite before Phase 0: absent.
-
-## Git Evidence
-
-Baseline commit present before this revision:
-
-- Commit hash: `da2b7dc`
-- Commit message: `docs: complete phase 0 audit and planning`
-- `git log -1 --oneline` before this revision: `da2b7dc docs: complete phase 0 audit and planning`
-- `git status --short` before this revision: empty output
-
-Phase 0 revision commit:
-
-- Commit message to use: `docs: complete phase 0 planning and architecture baseline`
-- Commit hash: reported in the final handoff after the commit is created.
-- Post-commit `git status --short`: must be empty and is reported in the final handoff.
-
-Note: a commit cannot include its own final hash inside tracked content without changing that hash. The final handoff records the revision commit hash and clean Git status after commit creation.
+No Phase 2 source upload, extraction, review workflow implementation, AI adapter, behavioral tests, or export implementation was added.
 
 ## Commands Run
 
-Attachment and repository inspection:
+Setup and dependency installation:
 
-- `Get-Content -LiteralPath 'C:\Users\minht\.codex\attachments\7809b320-6f14-4a7a-8aa4-57a2bca4100e\pasted-text.txt'`
-- `git status --short`
-- `Get-ChildItem -Force`
-- `rg --files`
-- `git log --oneline -5`
-
-Document review:
-
-- `Get-Content -LiteralPath docs/implementation_plan.md`
-- `Get-Content -LiteralPath docs/requirements_traceability.md`
-- `Get-Content -LiteralPath docs/assumptions.md`
-- `Get-Content -LiteralPath docs/progress.md`
-- `Get-Content -LiteralPath docs/phase0_test_report.md`
-- `Get-Content -LiteralPath docs/architecture_decisions/ADR-001-mvp-architecture.md`
-- `rg -n "^(#|##|###)|REQ|BR-|UC-|Security|Auth|Project|Evidence|unknown|obsolete|review|merge|delete|AI provider|Mock|Playwright|E2E|Session|CSRF" docs/01_business_forensics_mvp_requirements.md`
-- `rg -n "^(#|##|###)|REQ|BR-|UC-|Security|Auth|Project|Evidence|unknown|obsolete|review|merge|delete|AI provider|Mock|Playwright|E2E|Session|CSRF" docs/02_business_forensics_mvp_business_analysis.md`
-- `rg -n "^(#|##|###)|phase|commit|git|Phase 0|Phase 1|E2E|Playwright|source|evidence|review|merge|obsolete|session|CSRF|delete|mock" docs/00_CODEX_HANDOFF_BUSINESS_FORENSICS_MVP.md`
+- `py -3.12 -m venv .venv`
+- `py -3.12 -m pip --python .venv install -r requirements.lock`
+- `npm install`
+- `npx playwright install chromium`
 
 Verification:
 
-- `git diff --check`
-- `rg "Phase 1 cannot close as" docs/requirements_traceability.md`
-- `rg "TC-15 | Uploaded source is never executed. | REQ-006, REQ-008, REQ-011, REQ-035" docs/requirements_traceability.md`
-- `rg "ADR-002|Opaque server-side session|SameSite=Lax|CSRF" docs`
-- `rg "AnalysisGap|UnresolvedQuestion|BusinessStatement.*evidence|unknown_behavior" docs/assumptions.md docs/implementation_plan.md`
-- `rg "review_context|superseded|historical_validity|Physical project deletion|Mock AI adapter" docs/assumptions.md docs/implementation_plan.md`
-- `rg -n "[ \t]+$" docs`
+- `.\.venv\Scripts\python -m pytest`
+- `npm run web:build`
+- `npm run test:e2e`
+- `$env:DATABASE_URL='sqlite:///./runtime-tests/alembic.db'; .\.venv\Scripts\python -m alembic upgrade head`
+- `$env:DEV_SEED_PASSWORD='<local-dev-seed-password>'; docker compose config`
+- `$env:DEV_SEED_PASSWORD='<local-dev-seed-password>'; docker compose up -d db redis`
+- `$env:DATABASE_URL='postgresql+psycopg://bfp:bfp_dev_password@127.0.0.1:55432/bfp'; .\.venv\Scripts\python -m alembic upgrade head`
+- `$env:DEV_SEED_PASSWORD='<local-dev-seed-password>'; docker compose up -d --build api worker web`
+- `$env:DEV_SEED_PASSWORD='<local-dev-seed-password>'; docker compose ps`
+- `Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/v1/health' | ConvertTo-Json -Compress`
+- `Invoke-WebRequest -Uri 'http://127.0.0.1:5173' -UseBasicParsing | Select-Object -ExpandProperty StatusCode`
+- `npm audit --omit=dev`
 
 ## Test Result
 
-Phase 0 has no application code or existing application test suite. Verification for this phase is documentation-level and repository-level only.
+Detailed test evidence is recorded in `docs/phase1_test_report.md`.
 
-Detailed test evidence is recorded in `docs/phase0_test_report.md`.
+Summary:
 
-Result: passed after revision for required document existence, traceability structure, locked Phase 1 decisions, corrected TC-15 mapping, mandatory Phase 1 E2E gate, ADR-002 creation, semantic review checklist, and Git whitespace check.
+- Python unit/integration tests: `17 passed`
+- Frontend TypeScript/Vite build: passed
+- Mandatory Playwright E2E: `1 passed`
+- Alembic SQLite migration: passed
+- Alembic PostgreSQL migration through Compose: passed
+- Docker Compose full stack build/start: passed
+- API health from Compose stack: `{"status":"ok","database":"ok","worker":null}`
+- Web root from Compose stack: HTTP `200`
+- Production npm dependency audit: `found 0 vulnerabilities`
 
 ## Requirements Covered
 
-Phase 0 covers planning and traceability obligations from the handoff:
+Phase 1 implemented or partially implemented:
 
-- Read required documents.
-- Audit repository and environment.
-- Do not write implementation code before planning.
-- Create implementation plan.
-- Create requirements traceability matrix.
-- Create assumptions register.
-- Create architecture decisions directory and ADRs.
-- Identify and resolve Phase 1-blocking conflicts.
-- Identify missing security gates and lock Phase 1 security decisions.
-- Identify untestable requirements and MVP scope drift risks.
-
-No application acceptance criteria are implemented yet.
+- REQ-001 local login.
+- REQ-002 roles and backend RBAC.
+- REQ-003 project creation.
+- REQ-004 project list/detail/update/archive.
+- REQ-005 deterministic project state restrictions for Phase 1 actions.
+- REQ-032 project-scoped foundation boundaries.
+- REQ-035 Phase 1 auth/session/CSRF/RBAC/CORS/password/rate-limit subset.
+- REQ-036 health endpoint and request ID foundation.
+- REQ-038 Docker Compose and PostgreSQL migration.
+- REQ-039 README and local commands.
+- REQ-040 first two vertical-slice steps: login -> create project.
 
 ## Known Limitations
 
-- No runnable application exists yet.
-- No backend, frontend, worker, database migration, Docker Compose, or test suite exists yet.
-- Application tests such as pytest, integration tests, and Playwright do not exist before Phase 1.
-- Remaining open assumptions affect Phase 2 or later, not Phase 1.
+- Redis host port is `6380` to avoid an existing local port `6379` collision; API/worker still use internal Compose host `redis:6379`.
+- PostgreSQL host port is `55432` to avoid an existing local port `5432` collision; Compose services still use `db:5432`.
+- Full review workflow endpoint is only an RBAC-protected Phase 1 stub; implementation starts in Phase 4.
+- Source upload, extraction, evidence persistence, AI adapter, behavioral tests, dashboard, and export remain later phases.
+- `npm install` reports development-tool advisories, but `npm audit --omit=dev` reports zero production vulnerabilities.
 
 ## Open Assumptions
 
-Open assumptions are tracked in `docs/assumptions.md`.
+Open assumptions remain in `docs/assumptions.md`.
 
-Phase 1 blocking assumptions: none.
+Phase 2 blocking assumptions: exact ZIP scanner numeric limits and content sniffing policy need to be locked before secure ingestion implementation.
 
 ## Next Phase
 
-Phase 1 - Foundation is not authorized yet.
+Phase 2 - Secure ingestion:
 
-Do not start Phase 1 until the user reviews this revision and explicitly approves Phase 0 as closed/pass.
+- Upload text files and ZIP packages.
+- Safe ZIP extraction.
+- Immutable source artifact inventory.
+- Source viewer with escaping and line numbers.
+- Ingestion audit events.

@@ -1,8 +1,8 @@
 # Requirements Traceability Matrix
 
-Date: 2026-08-05
-Phase: 0 revision baseline
-Status: Phase 0 revision complete; Phase 1 remains blocked until user approval.
+Date: 2026-08-06
+Phase: 1 foundation
+Status: Phase 1 PASS.
 
 Sources:
 
@@ -13,20 +13,19 @@ Sources:
 Status legend:
 
 - `Planned`: not implemented yet.
+- `Partially implemented`: current phase implemented an explicitly scoped subset.
 - `Implemented`: implemented and verified in code.
 - `Blocked/Clarify`: cannot be completed until a decision is made.
-
-All rows are `Planned` because Phase 0 does not add implementation code.
 
 ## End-to-End Matrix
 
 | Requirement ID | Source reference | Requirement | Business rule / constraint | Module / API / UI | Planned phase | Status | Acceptance evidence |
 |---|---|---|---|---|---|---|---|
-| REQ-001 | SRS Section 11 Authentication; SRS Section 15 Security; BA Risk 5; BA BR-013 | User can log in locally. | Password uses Argon2 or bcrypt; login errors are generic; session behavior follows ADR-002. | Auth, User, Audit; `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`; Login UI | Phase 1 | Planned | Auth integration tests, password hashing unit test, generic login error test, secure session/CSRF tests |
-| REQ-002 | SRS Section 5 Personas; SRS Section 15 Security; BA Sections 5 and 13; BA BR-013 | Roles exist for `admin`, `analyst`, `reviewer`, `viewer`. | Backend RBAC is authoritative; viewer cannot review. | Auth, RBAC, Domain policy; role-aware API dependencies and UI actions | Phase 1 | Planned | TC-10, RBAC unit/integration tests |
-| REQ-003 | SRS Section 7 UC-01; SRS Section 11 Projects; BA BP-01; BA BR-013 | Admin or analyst can create a project. | One project represents one legacy system scope and snapshot; create audits `PROJECT_CREATED`; creation starts in `draft`. | Project Service, Audit; `POST /api/v1/projects`; Project create UI | Phase 1 | Planned | Project create integration test, audit-on-create test, Playwright login -> create project -> list E2E |
-| REQ-004 | SRS Section 7 UC-01; SRS Section 11 Projects; BA BP-01; BA BR-013 | Project list/detail/update/archive. | Important project changes create audit events; archive is irreversible in MVP; physical deletion is excluded. | Project Service, Project state, Audit; `GET/PATCH /api/v1/projects`, `POST /api/v1/projects/{id}/archive`; Project list/detail UI | Phase 1 | Planned | Project CRUD/archive integration tests, audit tests, archive-readonly test |
-| REQ-005 | SRS Section 8.1 Project; BA BP-01/BP-02/BP-09; BA BR-013 | Project status supports a deterministic draft-to-archive lifecycle. | Project status transitions follow the locked state machine; `PATCH /projects/{id}` cannot set status arbitrarily. | Domain state machine, Project Service; Project API and dashboard status | Phase 1 | Planned | State transition unit tests, API invalid-transition tests |
+| REQ-001 | SRS Section 11 Authentication; SRS Section 15 Security; BA Risk 5; BA BR-013 | User can log in locally. | Password uses Argon2 or bcrypt; login errors are generic; session behavior follows ADR-002. | Auth, User, Audit; `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`; Login UI | Phase 1 | Implemented | `test_auth_projects.py`, Playwright E2E, cookie/session/CSRF/rate-limit tests |
+| REQ-002 | SRS Section 5 Personas; SRS Section 15 Security; BA Sections 5 and 13; BA BR-013 | Roles exist for `admin`, `analyst`, `reviewer`, `viewer`. | Backend RBAC is authoritative; viewer cannot review. | Auth, RBAC, Domain policy; role-aware API dependencies and UI actions | Phase 1 | Implemented | RBAC integration tests; TC-10 viewer review forbidden |
+| REQ-003 | SRS Section 7 UC-01; SRS Section 11 Projects; BA BP-01; BA BR-013 | Admin or analyst can create a project. | One project represents one legacy system scope and snapshot; create must audit `PROJECT_CREATED`; creation starts in `draft`. | Project Service, Audit; `POST /api/v1/projects`; Project create UI | Phase 1 | Implemented | Project create integration test, audit-on-create test, Playwright login -> create project -> list E2E |
+| REQ-004 | SRS Section 7 UC-01; SRS Section 11 Projects; BA BP-01; BA BR-013 | Project list/detail/update/archive. | Important project changes create audit events; archive is irreversible in MVP; physical deletion is excluded. | Project Service, Project state, Audit; `GET/PATCH /api/v1/projects`, `POST /api/v1/projects/{id}/archive`; Project list/detail UI | Phase 1 | Implemented | Project CRUD/archive integration tests, audit tests, archive-readonly test |
+| REQ-005 | SRS Section 8.1 Project; BA BP-01/BP-02/BP-09; BA BR-013 | Project status supports a deterministic draft-to-archive lifecycle. | Project status transitions follow ADR-003; `PATCH /projects/{id}` cannot set status arbitrarily. | Domain state machine, Project Service; Project API and dashboard status | Phase 1 | Implemented | State transition unit tests, API invalid-status PATCH test |
 | REQ-006 | SRS Section 7 UC-02; SRS Section 15 Security; Handoff Security gates; BA BP-02; BA BR-006 | Upload text source files and ZIP packages. | Source is untrusted input; source upload is never executed. | Ingestion Service, Storage; `POST /api/v1/projects/{projectId}/artifacts/upload`; Upload UI | Phase 2 | Planned | TC-01, TC-15, upload integration tests |
 | REQ-007 | SRS Section 7 UC-02; BA BP-02; BA BR-016 | Support extensions `.cbl`, `.cob`, `.cpy`, `.sql`, `.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`. | Unsupported/binary files are not silently ignored; warnings are required. | Ingestion Service; Upload API response and inventory warnings | Phase 2 | Planned | Extension allowlist tests, binary unsupported warning test |
 | REQ-008 | SRS Section 7 UC-02; SRS Section 15 Security; Handoff Security gates; BA Risk 5; BA BR-006 | ZIP extraction must be safe. | Block path traversal, symlink, nested archive, path length, entry count, ratio, and ZIP bomb attacks; filename must not drive storage path. | Ingestion Security, Storage; Upload API | Phase 2 | Planned | TC-01, ZIP bomb regression, storage isolation regression, symlink/nested ZIP tests |
@@ -53,15 +52,15 @@ All rows are `Planned` because Phase 0 does not add implementation code.
 | REQ-029 | SRS Section 7 UC-12; BA Risk 6; BA BR-016, BR-017 | Dashboard shows artifact, analysis, statement, conflict, and test coverage metrics. | Do not claim absolute business completeness. | Dashboard Service; dashboard API and UI | Phase 7 | Planned | Dashboard aggregation tests, copy/content review |
 | REQ-030 | SRS Section 7 UC-11; SRS Section 19 Acceptance; BA BR-012 | Export ZIP contains required JSON files and schema version. | Export is provider-independent and excludes secrets/credentials. | Export Service; export API and download UI | Phase 7 | Planned | TC-09, secret exclusion tests |
 | REQ-031 | SRS Section 7 UC-11; SRS Section 10.11 AuditEvent; BA BR-012, BR-013 | Export creates a consistent snapshot. | Export includes schema version and project snapshot; export action is audited. | Export Service, Audit; export API/UI | Phase 7 | Planned | Snapshot consistency tests, audit-on-export tests |
-| REQ-032 | SRS Section 6 Principles; BA BR-010 | Project semantics are isolated. | No cross-customer/project facts; no fine-tuning on customer source. | Domain policy, AI Adapter; backend service boundaries | Phase 1/5 | Planned | Project isolation tests, AI context minimization tests |
+| REQ-032 | SRS Section 6 Principles; BA BR-010 | Project semantics are isolated. | No cross-customer/project facts; no fine-tuning on customer source. | Domain policy, AI Adapter; backend service boundaries | Phase 1/5 | Partially implemented | Phase 1 stores projects as scoped records and has no cross-project knowledge reuse; AI minimization remains Phase 5 |
 | REQ-033 | SRS Section 6 Principles; SRS Section 9 Statement types; BA Uncertainty model; BA BR-008, BR-014, BR-015, BR-016, BR-017 | Preserve exception, unknown, ambiguity, dead-code suspicion, obsolete-but-historic rules. | Rare statements are first-class; suspicion is not conclusion; historically valid statements are not erased. | Statement Service, Conflict, Review; statement detail UI | Phase 3/4/6 | Planned | Unknown/gap/conflict/obsolete metadata tests |
 | REQ-034 | SRS Section 6 Principles; BA BR-011, BR-018 | No industry best-practice normalization. | External templates are checklists/references only. | Domain policy, Glossary, AI prompt policy; review UI and AI adapter | Phase 3/5/6 | Planned | Negative auto-normalization tests and review checklist |
-| REQ-035 | SRS Section 15 Security; Handoff Security gates; BA Risk 5; BA BR-013 | Security controls include upload limit, CORS limits, login/AI rate limiting, secure sessions, password hashing, no source execution, HTML escaping, storage isolation. | All security gates must be tested. | Auth, Ingestion, Source Viewer, AI Adapter, Config | Phase 1/2/5/7 | Planned | Security regression suite |
-| REQ-036 | SRS Section 16 Observability; SRS Section 15 Security; BA Risk 5; BA BR-013 | Observability includes structured logs, request ID, job logs, health endpoint, no source content in production error logs. | Logs must not leak source by default. | Observability, API middleware, Worker; health endpoint | Phase 1/5 | Planned | Health tests, request ID tests, production log redaction tests |
+| REQ-035 | SRS Section 15 Security; Handoff Security gates; BA Risk 5; BA BR-013 | Security controls include upload limit, CORS limits, login/AI rate limiting, secure sessions, password hashing, no source execution, HTML escaping, storage isolation. | All security gates must be tested. | Auth, Ingestion, Source Viewer, AI Adapter, Config | Phase 1/2/5/7 | Partially implemented | Phase 1 auth/session/CSRF/RBAC/CORS/password/rate-limit tests passed; ingestion/source/AI/export security remain later |
+| REQ-036 | SRS Section 16 Observability; SRS Section 15 Security; BA Risk 5; BA BR-013 | Observability includes structured logs, request ID, job logs, health endpoint, no source content in production error logs. | Logs must not leak source by default. | Observability, API middleware, Worker; health endpoint | Phase 1/5 | Partially implemented | Health endpoint, worker health shell, request ID middleware; production log redaction remains Phase 5 |
 | REQ-037 | SRS Section 16 Performance; BA Product KPI; BA BR-016, BR-017 | Performance targets cover pagination, source view latency, upload progress, and async analysis. | MVP must avoid blocking analysis in request path. | API, UI, Worker; statement list, source viewer, upload UI, analysis jobs | Phase 2/3/7 | Planned | Pagination tests, source view perf smoke, upload progress UI test |
-| REQ-038 | SRS Section 17 Architecture; SRS Section 18 Project structure; BA Section 20 Constraints; BA BR-010 | MVP runs with Docker Compose and PostgreSQL. | No cloud vendor dependency; local storage abstraction with S3-compatible interface. | DevOps, Infrastructure, Storage; `docker compose up`, `.env.example` | Phase 1 | Planned | Compose smoke test, migration test |
-| REQ-039 | SRS Section 22 Definition of Done; BA Validation plan; BA BR-013 | README documents setup and demo. | DoD requires API docs and runnable increment. | Documentation; README and OpenAPI docs | Phase 1/7 | Planned | Documentation review, setup command smoke |
-| REQ-040 | SRS Section 19 Acceptance; Handoff first vertical slice; BA Acceptance Criteria; BA BR-001 through BR-013 | First vertical slice reaches login -> project -> upload -> candidate -> evidence -> reviewer verify -> behavioral test -> JSON export. | Must include migration, API, UI, auth, audit, unit/integration/E2E tests. | Cross-module full UI/API path | Phase 1-7 | Planned | Full E2E happy path |
+| REQ-038 | SRS Section 17 Architecture; SRS Section 18 Project structure; BA Section 20 Constraints; BA BR-010 | MVP runs with Docker Compose and PostgreSQL. | No cloud vendor dependency; local storage abstraction with S3-compatible interface. | DevOps, Infrastructure, Storage; `docker compose up`, `.env.example` | Phase 1 | Implemented | Compose config/build/start smoke; PostgreSQL Alembic migration passed |
+| REQ-039 | SRS Section 22 Definition of Done; BA Validation plan; BA BR-013 | README documents setup and demo. | DoD requires API docs and runnable increment. | Documentation; README and OpenAPI docs | Phase 1/7 | Implemented | README added; FastAPI OpenAPI available from running API |
+| REQ-040 | SRS Section 19 Acceptance; Handoff first vertical slice; BA Acceptance Criteria; BA BR-001 through BR-013 | First vertical slice reaches login -> project -> upload -> candidate -> evidence -> reviewer verify -> behavioral test -> JSON export. | Must include migration, API, UI, auth, audit, unit/integration/E2E tests. | Cross-module full UI/API path | Phase 1-7 | Partially implemented | Phase 1 E2E covers login -> create project -> project appears in list |
 
 ## Mandatory Test Coverage Map
 
@@ -76,7 +75,7 @@ All rows are `Planned` because Phase 0 does not add implementation code.
 | TC-07 | Direct edit of verified statement is blocked; revision is required. | REQ-023 | Phase 4 | Planned | Verified edit API test |
 | TC-08 | Conflict is preserved and system does not auto-select a winner. | REQ-025 | Phase 4/6 | Planned | Conflict workflow test |
 | TC-09 | Export reproducibility for unchanged logical data. | REQ-030, REQ-031 | Phase 7 | Planned | Deterministic export test |
-| TC-10 | Viewer cannot call review endpoint; returns 403. | REQ-002, REQ-021, REQ-035 | Phase 1/4 | Planned | RBAC integration test |
+| TC-10 | Viewer cannot call review endpoint; returns 403. | REQ-002, REQ-021, REQ-035 | Phase 1/4 | Implemented | `test_viewer_cannot_create_project_or_call_review_endpoint` |
 | TC-11 | Artifact hash is preserved and used in evidence/export. | REQ-009, REQ-019, REQ-030 | Phase 2/7 | Planned | Artifact/evidence/export integrity test |
 | TC-12 | Evidence line ranges are within artifact bounds. | REQ-019 | Phase 2/4 | Planned | Evidence range validation test |
 | TC-13 | Revision lineage exists when verified statement is revised/superseded. | REQ-023 | Phase 4 | Planned | Revision lineage test |
@@ -91,7 +90,7 @@ Phase 1 cannot close as `PASS` unless this Playwright flow passes:
 2. Create project.
 3. Confirm the project appears in the project list.
 
-If Playwright cannot run, Phase 1 must be reported as `CONDITIONAL` or `BLOCKED`, not `PASS`.
+Result: passed in Phase 1 (`npm run test:e2e`, `1 passed`).
 
 ## Security Gate Matrix
 
@@ -118,10 +117,10 @@ If Playwright cannot run, Phase 1 must be reported as `CONDITIONAL` or `BLOCKED`
 
 ## Current Coverage Status
 
-Phase 0 covers planning traceability only:
+Phase 1 foundation coverage:
 
-- Requirements are mapped to source references, modules/API/UI, planned phase, status, and acceptance evidence.
-- TC-15 is mapped to REQ-006, REQ-008, REQ-011, and REQ-035.
-- No application requirement is implemented yet.
-- No implementation code exists yet.
-- Phase 1 may begin only after user approval of the Phase 0 revision.
+- REQ-001 through REQ-005 are implemented and verified.
+- TC-10 is implemented as a backend RBAC gate on the Phase 1 review stub.
+- REQ-035, REQ-036, REQ-032, and REQ-040 are partially implemented for their Phase 1 subset.
+- REQ-038 and REQ-039 are implemented for Phase 1.
+- Later-phase requirements remain planned.

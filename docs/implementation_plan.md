@@ -1,8 +1,8 @@
 # Business Forensics Platform MVP Implementation Plan
 
 Date: 2026-08-06
-Phase: 2 - Secure source ingestion
-Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; Phase 3 not started.
+Phase: 4 - Review workflow planning
+Status: Phase 3 `CLOSED_PASS`; Phase 4 not started and will use Epic-based delivery.
 
 Source documents:
 
@@ -290,6 +290,22 @@ Key deliverables:
 Goal:
 
 Implement human review, state transitions, evidence validation, revisions, merge semantics, obsolete handling, and conflict preservation.
+
+Delivery model:
+
+- Phase 4 is not delivered as one large implementation PR.
+- Phase 4 is split into independently reviewed Epics.
+- Each Epic should define scope, affected invariants, migration/API/UI/test impact, acceptance criteria, and out-of-scope boundaries before implementation.
+- Each Epic should be committed and reviewed independently.
+- Phase 4 can be marked `PASS` only after all required Phase 4 Epics pass review.
+
+Planned Epics:
+
+- Epic 4.1 - Review Domain.
+- Epic 4.2 - Review API.
+- Epic 4.3 - Review UI.
+- Epic 4.4 - Revision Lineage.
+- Epic 4.5 - Review Audit.
 
 Key deliverables:
 

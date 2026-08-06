@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 3 static extraction implementation
-Status: Phase 3 implemented; awaiting Architect implementation gate review.
+Status: Phase 3 implementation `CLOSED_PASS`; Phase 4 not started.
 
 ## Locked Principles
 
@@ -85,6 +85,7 @@ The Phase 3 design received Architect `CLOSED_PASS_DESIGN` on 2026-08-06. Implem
 | DEC-035 | Keep `source_artifacts.candidate_count` as a transactionally maintained cache; do not persist `business_statements.evidence_count` in Phase 3. | Implemented | Statement APIs compute evidence count by query. |
 | DEC-036 | Candidate identity is provenance-based: pattern ID, artifact hash, evidence ranges, structured expression, scope, analyzer version, and config hash; statement text is not a primary identity component. | Implemented | Prevents wording/template changes from driving identity. |
 | DEC-037 | Static extractor is insert-only for `BusinessStatement`, `Evidence`, `AnalysisGap`, and `UnresolvedQuestion`; no candidate `UPDATE`, `UPSERT`, merge, or lineage mutation is allowed in Phase 3. | Implemented | Cross-run candidate lineage is deferred to Phase 4 review/revision semantics. |
+| DEC-038 | From Phase 4 onward, delivery is split into independently reviewed Epics instead of one large Phase -> Code -> Review cycle. | Accepted by Architect on 2026-08-06 | Phase 4 starts with Epic 4.1 Review Domain and does not close until all required Phase 4 Epics pass review. |
 
 ## Requirement Conflicts Or Tensions
 
@@ -199,7 +200,9 @@ This is metadata, not a new statement state.
 | OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
 | OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
 
-Phase 3 implementation blocking assumptions: none known after implementation. Phase 3 remains awaiting Architect implementation gate review before Phase 4 can start.
+Phase 3 implementation blocking assumptions: none. Phase 3 closed as `CLOSED_PASS`.
+
+Phase 4 implementation must follow the Epic delivery model in DEC-038. No Phase 4 code should begin until the intended Epic scope is explicit.
 
 ## Assumption Update Rule
 

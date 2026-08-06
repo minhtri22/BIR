@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: 3 static extraction implementation
-Status: Phase 3 implemented; awaiting Architect implementation gate review.
+Status: Phase 3 implementation `CLOSED_PASS`; Phase 4 not started.
 
 Sources:
 
@@ -108,7 +108,9 @@ Result: passed in Phase 2 (`npm run test:e2e`, `2 passed` total).
 
 Design status: `CLOSED_PASS_DESIGN`.
 
-Implementation status: implemented and awaiting Architect gate review.
+Implementation status: `CLOSED_PASS`.
+
+Architect implementation verdict: `CLOSED_PASS`.
 
 Design evidence:
 
@@ -167,17 +169,18 @@ Phase 2 coverage:
 - REQ-001 through REQ-005 are implemented and verified.
 - TC-10 is implemented as a backend RBAC gate on the Phase 1 review stub.
 - REQ-006 through REQ-009 are implemented and verified for Phase 2.
-- REQ-010 is partially implemented: source viewer and escaping are complete; evidence highlighting remains later.
+- REQ-010 is implemented through source viewer escaping and Phase 3 evidence highlight navigation.
 - TC-01 is implemented.
-- TC-11 artifact hash preservation is implemented; evidence/export usage remains later.
-- TC-15 ingestion no-execution is implemented; extraction no-execution remains Phase 3.
+- TC-11 artifact hash preservation is implemented; Phase 3 evidence usage is implemented; export usage remains Phase 7.
+- TC-15 ingestion and extraction no-execution portions are implemented.
 - REQ-037 is partially implemented for Phase 2: bounded upload enforcement and source viewer smoke are covered; 100 MB upload support plus progress UI is formally deferred by DEC-026 to Phase 7 or post-MVP.
 - REQ-035, REQ-036, REQ-032, REQ-037, and REQ-040 are partially implemented for their Phase 1/2 subsets.
 - REQ-038 and REQ-039 are implemented for Phase 1.
-- Extraction, evidence, review, AI, behavioral test, dashboard, and export requirements remain planned.
+- Review, AI, behavioral test, dashboard, and export requirements remain planned.
 
 Phase 3 implementation coverage:
 
 - Static extraction contract is approved and updated with the insert-only candidate invariant.
 - Phase 3 migration, API, worker actor, extraction package, candidate/evidence UI, tests, and E2E are implemented.
-- Phase 3 implementation is awaiting Architect gate review.
+- Phase 3 implementation is `CLOSED_PASS`.
+- Phase 4 will be delivered by independently reviewed Epics: Review Domain, Review API, Review UI, Revision Lineage, and Review Audit.

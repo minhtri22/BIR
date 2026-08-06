@@ -1,8 +1,13 @@
 # Phase 3 Static Extraction Test Report
 
 Date: 2026-08-06
-Status: IMPLEMENTED - awaiting Architect gate review
+Status: CLOSED_PASS
 Branch: `phase-3-static-extraction`
+
+Architect verdict:
+
+- Phase 3 implementation: `CLOSED_PASS`.
+- Scope, migration, idempotency, active-job model, analyzer ownership, insert-only invariant, evidence provenance, UI, and tests accepted.
 
 ## Scope Verified
 

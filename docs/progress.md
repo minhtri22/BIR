@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Current phase: Phase 3 - Static Extraction
-Status: Phase 3 implemented; awaiting Architect implementation gate review
+Status: Phase 3 implementation `CLOSED_PASS`; Phase 4 not started
 
 ## Phase 0
 
@@ -160,6 +160,12 @@ Implemented:
 
 No Phase 4 review workflow, AI adapter, behavioral tests, dashboard, or export implementation was added.
 
+Phase 3 implementation gate:
+
+- Architect verdict: `CLOSED_PASS`.
+- Architect review confirmed scope discipline, migration quality, idempotency, active-job enforcement, server-owned analyzer identity, insert-only candidate invariant, evidence provenance, candidate queue UI, and test coverage.
+- Phase 3 remains the baseline for Phase 4 review workflow work.
+
 ## Commands Run
 
 Phase 3 implementation:
@@ -273,13 +279,28 @@ Open assumptions remain in `docs/assumptions.md`.
 
 Phase 3 implementation blocking assumptions:
 
-- None known after implementation. Phase 4 remains blocked until Architect reviews Phase 3 implementation.
+- None. Phase 3 is closed as `CLOSED_PASS`.
 
 ## Next Phase
 
-Phase 4 review workflow, blocked until Phase 3 implementation gate review:
+Phase 4 review workflow, not started:
 
 - Human review decisions.
 - Reviewer verification gate.
 - Candidate revision/lineage.
 - Review audit history.
+
+Delivery model from Phase 4 onward:
+
+- Work is split into Epics instead of one large phase implementation.
+- Each Epic should have a small contract or scope note before implementation.
+- Each Epic should be implemented, tested, documented, committed, and reviewed independently.
+- Phase 4 can close only after all required Phase 4 Epics pass review.
+
+Planned Phase 4 Epics:
+
+- Epic 4.1 - Review Domain.
+- Epic 4.2 - Review API.
+- Epic 4.3 - Review UI.
+- Epic 4.4 - Revision Lineage.
+- Epic 4.5 - Review Audit.

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Archive, LogOut, Plus, ShieldCheck } from 'lucide-react';
+import { Archive, Eye, FileText, FileUp, LogOut, Plus, ShieldCheck } from 'lucide-react';
 import './styles.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1';
@@ -28,6 +28,49 @@ type Project = {
   archive_reason: string | null;
 };
 
+type SourceArtifact = {
+  id: string;
+  project_id: string;
+  original_path: string;
+  storage_path: string;
+  file_extension: string;
+  size_bytes: number;
+  sha256: string;
+  encoding: string;
+  line_count: number;
+  analysis_status: string;
+  candidate_count: number;
+  created_by: string;
+  created_at: string;
+};
+
+type IngestionWarning = {
+  id: string;
+  project_id: string;
+  artifact_id: string | null;
+  original_path: string;
+  warning_code: string;
+  message: string;
+  created_by: string;
+  created_at: string;
+};
+
+type SourceContentLine = {
+  number: number;
+  escaped_html: string;
+};
+
+type SourceUploadResponse = {
+  project: Project;
+  artifacts: SourceArtifact[];
+  warnings: IngestionWarning[];
+};
+
+type SourceContentResponse = {
+  artifact: SourceArtifact;
+  lines: SourceContentLine[];
+};
+
 type AuthSession = {
   user: User;
   csrf_token: string;
@@ -39,7 +82,8 @@ async function apiFetch<T>(
   csrfToken?: string
 ): Promise<T> {
   const headers = new Headers(options.headers);
-  if (options.body && !headers.has('Content-Type')) {
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  if (options.body && !headers.has('Content-Type') && !isFormData) {
     headers.set('Content-Type', 'application/json');
   }
   if (csrfToken) {
@@ -52,9 +96,20 @@ async function apiFetch<T>(
   });
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorBody.detail ?? response.statusText);
+    throw new Error(typeof errorBody.detail === 'string' ? errorBody.detail : response.statusText);
   }
   return (await response.json()) as T;
+}
+
+function formatSize(sizeBytes: number) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+  return `${(sizeBytes / 1024).toFixed(1)} KB`;
+}
+
+function formatStatus(status: string) {
+  return status.replace(/_/g, ' ');
 }
 
 function App() {
@@ -64,19 +119,18 @@ function App() {
   const [projectName, setProjectName] = React.useState('');
   const [legacySystemName, setLegacySystemName] = React.useState('');
   const [projects, setProjects] = React.useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null);
+  const [artifacts, setArtifacts] = React.useState<SourceArtifact[]>([]);
+  const [selectedArtifactId, setSelectedArtifactId] = React.useState<string | null>(null);
+  const [sourceLines, setSourceLines] = React.useState<SourceContentLine[]>([]);
+  const [uploadWarnings, setUploadWarnings] = React.useState<IngestionWarning[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [isInventoryLoading, setIsInventoryLoading] = React.useState(false);
+  const [isUploading, setIsUploading] = React.useState(false);
 
-  const loadProjects = React.useCallback(
-    async (csrfToken = auth?.csrf_token) => {
-      if (!csrfToken && !auth) {
-        return;
-      }
-      const data = await apiFetch<Project[]>('/projects');
-      setProjects(data);
-    },
-    [auth]
-  );
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? null;
 
   React.useEffect(() => {
     apiFetch<AuthSession>('/auth/me')
@@ -84,12 +138,35 @@ function App() {
         setAuth(session);
         return apiFetch<Project[]>('/projects');
       })
-      .then(setProjects)
+      .then((data) => {
+        setProjects(data);
+        setSelectedProjectId(data[0]?.id ?? null);
+      })
       .catch(() => {
         setAuth(null);
       })
       .finally(() => setIsLoading(false));
   }, []);
+
+  React.useEffect(() => {
+    if (!auth || !selectedProjectId) {
+      setArtifacts([]);
+      setSelectedArtifactId(null);
+      setSourceLines([]);
+      return;
+    }
+
+    setIsInventoryLoading(true);
+    setUploadWarnings([]);
+    apiFetch<SourceArtifact[]>(`/projects/${selectedProjectId}/artifacts`)
+      .then((data) => {
+        setArtifacts(data);
+        setSelectedArtifactId((current) => (current && data.some((row) => row.id === current) ? current : null));
+        setSourceLines([]);
+      })
+      .catch((caught) => setError(caught.message))
+      .finally(() => setIsInventoryLoading(false));
+  }, [auth, selectedProjectId]);
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,6 +184,7 @@ function App() {
     setPassword('');
     const data = await apiFetch<Project[]>('/projects');
     setProjects(data);
+    setSelectedProjectId(data[0]?.id ?? null);
   }
 
   async function handleCreateProject(event: React.FormEvent<HTMLFormElement>) {
@@ -131,8 +209,61 @@ function App() {
       auth.csrf_token
     );
     setProjects((current) => [created, ...current]);
+    setSelectedProjectId(created.id);
+    setArtifacts([]);
+    setSelectedArtifactId(null);
+    setSourceLines([]);
+    setUploadWarnings([]);
     setProjectName('');
     setLegacySystemName('');
+  }
+
+  async function handleUploadSource(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!auth || !selectedProject) {
+      return;
+    }
+    const input = event.currentTarget.elements.namedItem('sourceFile') as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (!file) {
+      setError('Choose a source file first.');
+      return;
+    }
+
+    setError(null);
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const result = await apiFetch<SourceUploadResponse>(
+        `/projects/${selectedProject.id}/artifacts/upload`,
+        { method: 'POST', body: formData },
+        auth.csrf_token
+      );
+      setProjects((current) =>
+        current.map((project) => (project.id === result.project.id ? result.project : project))
+      );
+      setArtifacts((current) => [...current, ...result.artifacts]);
+      setUploadWarnings(result.warnings);
+      input.value = '';
+      if (result.artifacts[0]) {
+        await handleSelectArtifact(result.artifacts[0]);
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  async function handleSelectArtifact(artifact: SourceArtifact) {
+    if (!selectedProject) {
+      return;
+    }
+    setError(null);
+    setSelectedArtifactId(artifact.id);
+    const content = await apiFetch<SourceContentResponse>(
+      `/projects/${selectedProject.id}/artifacts/${artifact.id}/content`
+    );
+    setSourceLines(content.lines);
   }
 
   async function handleLogout() {
@@ -142,6 +273,11 @@ function App() {
     await apiFetch('/auth/logout', { method: 'POST' }, auth.csrf_token);
     setAuth(null);
     setProjects([]);
+    setSelectedProjectId(null);
+    setArtifacts([]);
+    setSelectedArtifactId(null);
+    setSourceLines([]);
+    setUploadWarnings([]);
   }
 
   if (isLoading) {
@@ -195,7 +331,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <span className="eyebrow">Foundation</span>
+          <span className="eyebrow">Secure ingestion</span>
           <h1>Projects</h1>
         </div>
         <div className="session-tools">
@@ -240,27 +376,140 @@ function App() {
           <button type="submit">Create project</button>
         </form>
 
-        <section className="project-list" aria-label="Project list">
-          <div className="section-heading">
-            <Archive aria-hidden="true" size={18} />
-            <h2>Project list</h2>
-          </div>
-          {projects.length === 0 ? (
-            <p className="empty-state">No projects yet.</p>
-          ) : (
-            <ul>
-              {projects.map((project) => (
-                <li key={project.id}>
-                  <div>
-                    <strong>{project.name}</strong>
-                    <span>{project.legacy_system_name ?? 'No legacy system set'}</span>
+        <div className="work-column">
+          <section className="project-list" aria-label="Project list">
+            <div className="section-heading">
+              <Archive aria-hidden="true" size={18} />
+              <h2>Project list</h2>
+            </div>
+            {projects.length === 0 ? (
+              <p className="empty-state">No projects yet.</p>
+            ) : (
+              <ul>
+                {projects.map((project) => (
+                  <li key={project.id}>
+                    <button
+                      className={`project-row ${project.id === selectedProjectId ? 'is-selected' : ''}`}
+                      type="button"
+                      onClick={() => setSelectedProjectId(project.id)}
+                    >
+                      <span>
+                        <strong>{project.name}</strong>
+                        <small>{project.legacy_system_name ?? 'No legacy system set'}</small>
+                      </span>
+                      <span className="status-pill">{formatStatus(project.status)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="source-panel" aria-label="Source ingestion">
+            <div className="section-heading">
+              <FileUp aria-hidden="true" size={18} />
+              <h2>Source ingestion</h2>
+            </div>
+            {selectedProject ? (
+              <>
+                <form
+                  className="upload-row"
+                  onSubmit={(event) => {
+                    handleUploadSource(event).catch((caught) => setError(caught.message));
+                  }}
+                >
+                  <label>
+                    Source file
+                    <input
+                      name="sourceFile"
+                      type="file"
+                      accept=".zip,.cbl,.cob,.cpy,.sql,.txt,.md,.csv,.json,.yaml,.yml"
+                    />
+                  </label>
+                  <button type="submit" disabled={isUploading}>
+                    {isUploading ? 'Uploading' : 'Upload source'}
+                  </button>
+                </form>
+
+                {uploadWarnings.length > 0 ? (
+                  <ul className="warning-list">
+                    {uploadWarnings.map((warning) => (
+                      <li key={warning.id}>
+                        <strong>{warning.original_path}</strong>
+                        <span>{warning.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                <div className="inventory-heading">
+                  <div className="section-heading">
+                    <FileText aria-hidden="true" size={18} />
+                    <h2>Inventory</h2>
                   </div>
-                  <span className="status-pill">{project.status}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                  <span>{artifacts.length} files</span>
+                </div>
+                {isInventoryLoading ? (
+                  <p className="empty-state">Loading inventory...</p>
+                ) : artifacts.length === 0 ? (
+                  <p className="empty-state">No source files stored.</p>
+                ) : (
+                  <ul className="artifact-list">
+                    {artifacts.map((artifact) => (
+                      <li key={artifact.id}>
+                        <button
+                          className={`artifact-row ${artifact.id === selectedArtifactId ? 'is-selected' : ''}`}
+                          type="button"
+                          onClick={() => {
+                            handleSelectArtifact(artifact).catch((caught) => setError(caught.message));
+                          }}
+                        >
+                          <span>
+                            <strong>{artifact.original_path}</strong>
+                            <small>
+                              {artifact.encoding} · {artifact.line_count} lines · {formatSize(artifact.size_bytes)}
+                            </small>
+                          </span>
+                          <span>{artifact.sha256.slice(0, 10)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : (
+              <p className="empty-state">No project selected.</p>
+            )}
+          </section>
+
+          <section className="source-viewer" aria-label="Source viewer">
+            <div className="section-heading">
+              <Eye aria-hidden="true" size={18} />
+              <h2>Source viewer</h2>
+            </div>
+            {selectedArtifact ? (
+              <>
+                <div className="viewer-meta">
+                  <strong>{selectedArtifact.original_path}</strong>
+                  <span>{selectedArtifact.sha256}</span>
+                </div>
+                <pre className="source-code">
+                  {sourceLines.map((line) => (
+                    <span className="code-line" key={line.number}>
+                      <span className="line-number">{line.number}</span>
+                      <span
+                        className="line-text"
+                        dangerouslySetInnerHTML={{ __html: line.escaped_html || ' ' }}
+                      />
+                    </span>
+                  ))}
+                </pre>
+              </>
+            ) : (
+              <p className="empty-state">No source file selected.</p>
+            )}
+          </section>
+        </div>
       </section>
     </main>
   );
@@ -271,4 +520,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>
 );
-

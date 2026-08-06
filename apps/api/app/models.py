@@ -78,6 +78,41 @@ class Project(Base):
     archive_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class SourceArtifact(Base):
+    __tablename__ = "source_artifacts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    original_path: Mapped[str] = mapped_column(Text, nullable=False)
+    storage_path: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    file_extension: Mapped[str] = mapped_column(String(16), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    encoding: Mapped[str] = mapped_column(String(40), nullable=False)
+    line_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    analysis_status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_analyzed")
+    candidate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    created_at: Mapped[object] = mapped_column(DateTime, default=utc_now, nullable=False)
+
+
+class IngestionWarning(Base):
+    __tablename__ = "ingestion_warnings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    artifact_id: Mapped[str | None] = mapped_column(
+        ForeignKey("source_artifacts.id"),
+        nullable=True,
+        index=True,
+    )
+    original_path: Mapped[str] = mapped_column(Text, nullable=False)
+    warning_code: Mapped[str] = mapped_column(String(80), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    created_at: Mapped[object] = mapped_column(DateTime, default=utc_now, nullable=False)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 
@@ -88,4 +123,3 @@ class AuditEvent(Base):
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[object] = mapped_column(DateTime, default=utc_now, nullable=False)
-

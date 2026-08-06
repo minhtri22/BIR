@@ -89,6 +89,33 @@ PROJECT_TRANSITIONS: tuple[ProjectTransition, ...] = (
     ProjectTransition(
         "ingesting",
         "ready_for_analysis",
+        ("system", "admin"),
+        "fail_or_cancel_ingestion",
+        "INGESTION_FAILED_OR_CANCELLED",
+        "Additional ingestion fails or is cancelled.",
+        recovery_rule="Return to recorded previous stable state.",
+    ),
+    ProjectTransition(
+        "ingesting",
+        "review_in_progress",
+        ("system", "admin"),
+        "fail_or_cancel_ingestion",
+        "INGESTION_FAILED_OR_CANCELLED",
+        "Additional ingestion fails or is cancelled.",
+        recovery_rule="Return to recorded previous stable state.",
+    ),
+    ProjectTransition(
+        "ingesting",
+        "export_ready",
+        ("system", "admin"),
+        "fail_or_cancel_ingestion",
+        "INGESTION_FAILED_OR_CANCELLED",
+        "Additional ingestion fails or is cancelled.",
+        recovery_rule="Return to recorded previous stable state.",
+    ),
+    ProjectTransition(
+        "ingesting",
+        "ready_for_analysis",
         ("system",),
         "complete_ingestion",
         "INGESTION_COMPLETED",
@@ -233,4 +260,3 @@ def next_status_for_source_upload(current: ProjectStatus) -> ProjectStatus:
         command="accept_source_upload",
     )
     return "ingesting"
-

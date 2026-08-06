@@ -1,8 +1,8 @@
 # Project Progress
 
 Date: 2026-08-06
-Current phase: Phase 1 - Foundation
-Status: PASS
+Current phase: Phase 2 - Secure Source Ingestion
+Status: PASS candidate for gate review
 
 ## Phase 0
 
@@ -42,6 +42,40 @@ Implemented:
 
 No Phase 2 source upload, extraction, review workflow implementation, AI adapter, behavioral tests, or export implementation was added.
 
+Closed status:
+
+- `PHASE 1 - CLOSED_PASS`
+- Foundation commit after seed-password hygiene amend: `e4cdaab feat: complete phase 1 foundation`
+
+## Phase 2 Summary
+
+Implemented:
+
+- Source upload endpoint for text files and ZIP packages.
+- `SourceArtifact` and `IngestionWarning` persistence with Alembic migration `0002_phase2_source_ingestion`.
+- Immutable artifact file writes under generated storage paths that do not use user filenames.
+- SHA-256, encoding, line count, size, extension, analysis status, and candidate count inventory metadata.
+- Safe ZIP validation before storage write:
+  - path traversal blocked;
+  - symlink entries blocked;
+  - nested archives blocked;
+  - entry count, path length, decompression ratio, and total uncompressed size limits enforced;
+  - Unicode path normalization;
+  - duplicate normalized paths blocked.
+- Extension allowlist for `.cbl`, `.cob`, `.cpy`, `.sql`, `.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`.
+- Binary-looking and unsupported entries return warnings and are not stored as source artifacts.
+- Source inventory API and UI.
+- Source viewer API and UI with line numbers and escaped untrusted source content.
+- Project lifecycle integration:
+  - upload acceptance moves eligible projects to `ingesting`;
+  - successful ingestion moves to `ready_for_analysis`;
+  - failed/rejected ingestion restores the previous stable state.
+- Audit events for `SOURCE_UPLOAD_ACCEPTED`, `INGESTION_COMPLETED`, and `INGESTION_FAILED_OR_CANCELLED`.
+- Compose artifact storage volume at `/app/runtime-artifacts`.
+- Phase 2 Playwright E2E for upload -> inventory -> escaped source viewer.
+
+No Phase 3 extraction, candidate generation, evidence model, review workflow, AI adapter, behavioral tests, or export implementation was added.
+
 ## Commands Run
 
 Setup and dependency installation:
@@ -65,18 +99,24 @@ Verification:
 - `Invoke-RestMethod -Uri 'http://127.0.0.1:8000/api/v1/health' | ConvertTo-Json -Compress`
 - `Invoke-WebRequest -Uri 'http://127.0.0.1:5173' -UseBasicParsing | Select-Object -ExpandProperty StatusCode`
 - `npm audit --omit=dev`
+- `.\.venv\Scripts\python.exe -m ensurepip --upgrade`
+- `.\.venv\Scripts\python.exe -m pip install -r requirements.lock`
+- `.\.venv\Scripts\python.exe -m pytest tests\unit tests\integration`
+- `$env:DATABASE_URL='sqlite:///runtime-tests/alembic-phase2-<guid>.db'; .\.venv\Scripts\alembic.exe upgrade head`
+- `$env:DEV_SEED_PASSWORD='<generated-one-off>'; docker compose up -d --build api worker web`
+- `$env:DEV_SEED_PASSWORD='<generated-one-off>'; docker compose exec -T api alembic current`
 
 ## Test Result
 
-Detailed test evidence is recorded in `docs/phase1_test_report.md`.
+Detailed test evidence is recorded in `docs/phase1_test_report.md` and `docs/phase2_test_report.md`.
 
 Summary:
 
-- Python unit/integration tests: `17 passed`
+- Python unit/integration tests: `23 passed`
 - Frontend TypeScript/Vite build: passed
-- Mandatory Playwright E2E: `1 passed`
-- Alembic SQLite migration: passed
-- Alembic PostgreSQL migration through Compose: passed
+- Playwright E2E: `2 passed`
+- Alembic SQLite migration: passed through `0002_phase2_source_ingestion`
+- Alembic PostgreSQL migration through Compose: `0002_phase2_source_ingestion (head)`
 - Docker Compose full stack build/start: passed
 - API health from Compose stack: `{"status":"ok","database":"ok","worker":null}`
 - Web root from Compose stack: HTTP `200`
@@ -98,26 +138,37 @@ Phase 1 implemented or partially implemented:
 - REQ-039 README and local commands.
 - REQ-040 first two vertical-slice steps: login -> create project.
 
+Phase 2 implemented or partially implemented:
+
+- REQ-006 source upload for text and ZIP with no source execution.
+- REQ-007 supported extension allowlist and unsupported/binary warnings.
+- REQ-008 safe ZIP validation and storage isolation.
+- REQ-009 immutable artifact inventory metadata.
+- REQ-010 source viewer line numbers and escaping; evidence highlighting remains later.
+- REQ-035 ingestion/source-viewer security subset.
+- REQ-040 third vertical-slice step: upload one source file.
+
 ## Known Limitations
 
 - Redis host port is `6380` to avoid an existing local port `6379` collision; API/worker still use internal Compose host `redis:6379`.
 - PostgreSQL host port is `55432` to avoid an existing local port `5432` collision; Compose services still use `db:5432`.
 - Full review workflow endpoint is only an RBAC-protected Phase 1 stub; implementation starts in Phase 4.
-- Source upload, extraction, evidence persistence, AI adapter, behavioral tests, dashboard, and export remain later phases.
+- Extraction, evidence persistence, AI adapter, behavioral tests, dashboard, and export remain later phases.
+- Upload progress UI is minimal; progress bars/resumable upload are deferred.
+- Evidence/export usage of artifact hashes remains deferred until evidence and export models exist.
 - `npm install` reports development-tool advisories, but `npm audit --omit=dev` reports zero production vulnerabilities.
 
 ## Open Assumptions
 
 Open assumptions remain in `docs/assumptions.md`.
 
-Phase 2 blocking assumptions: exact ZIP scanner numeric limits and content sniffing policy need to be locked before secure ingestion implementation.
+Phase 2 blocking assumptions: none. ZIP scanner numeric limits and content sniffing policy were locked in Phase 2 implementation.
 
 ## Next Phase
 
-Phase 2 - Secure ingestion:
+Phase 3 - Static extraction:
 
-- Upload text files and ZIP packages.
-- Safe ZIP extraction.
-- Immutable source artifact inventory.
-- Source viewer with escaping and line numbers.
-- Ingestion audit events.
+- Source chunking and deterministic static extractor.
+- Analyzer versioning and idempotency by artifact hash plus analyzer version.
+- Candidate, gap/question, and evidence persistence.
+- Candidate queue UI.

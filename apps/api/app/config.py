@@ -39,6 +39,12 @@ class Settings:
         "LOGIN_RATE_LIMIT_WINDOW_SECONDS",
         300,
     )
+    artifact_storage_root: str = os.getenv("ARTIFACT_STORAGE_ROOT", "runtime-artifacts")
+    max_upload_bytes: int = _int_env("MAX_UPLOAD_BYTES", 20 * 1024 * 1024)
+    max_zip_entries: int = _int_env("MAX_ZIP_ENTRIES", 1000)
+    max_zip_path_length: int = _int_env("MAX_ZIP_PATH_LENGTH", 240)
+    max_zip_uncompressed_bytes: int = _int_env("MAX_ZIP_UNCOMPRESSED_BYTES", 100 * 1024 * 1024)
+    max_zip_compression_ratio: int = _int_env("MAX_ZIP_COMPRESSION_RATIO", 100)
     dev_seed_email: str = os.getenv("DEV_SEED_EMAIL", "admin@example.com")
     dev_seed_password: str | None = os.getenv("DEV_SEED_PASSWORD")
 

@@ -1,8 +1,8 @@
 # Assumptions, Open Questions, and MVP Risk Register
 
-Date: 2026-08-05
-Phase: 0 revision baseline
-Status: Phase 0 revision complete; Phase 1 remains blocked until user approval.
+Date: 2026-08-06
+Phase: 2 secure source ingestion
+Status: Phase 2 PASS candidate for gate review.
 
 ## Locked Principles
 
@@ -52,6 +52,17 @@ These are not assumptions and must not be weakened during MVP delivery:
 | DEC-014 | Physical project deletion is outside MVP; no delete project API or UI. | Accepted | Phase 1 implements archive only. |
 | DEC-015 | Mock AI adapter is mandatory; real provider is optional stretch scope after mock tests pass. | Accepted | Phase 5 can pass with mock adapter if boundary tests pass. |
 | DEC-016 | Python and Node dependencies must be locked; linting/type checks are CI gates once tooling exists; committed/applied migrations are not edited in place. | Accepted | Phase 1 must commit lock files and migration discipline. |
+
+## Phase 2 Decisions Locked During Implementation
+
+| ID | Decision | Status | Impact |
+|---|---|---|---|
+| DEC-017 | Source artifact storage paths are generated from project id and artifact id, not user filenames. | Accepted | Prevents filename-driven path placement and supports immutable artifact storage. |
+| DEC-018 | Phase 2 text allowlist is `.cbl`, `.cob`, `.cpy`, `.sql`, `.txt`, `.md`, `.csv`, `.json`, `.yaml`, `.yml`. | Accepted | Unsupported files produce ingestion warnings and are not stored as source artifacts. |
+| DEC-019 | Default ingestion limits are `MAX_UPLOAD_BYTES=20971520`, `MAX_ZIP_ENTRIES=1000`, `MAX_ZIP_PATH_LENGTH=240`, `MAX_ZIP_UNCOMPRESSED_BYTES=104857600`, and `MAX_ZIP_COMPRESSION_RATIO=100`. | Accepted | Limits are configurable through environment variables and tested with lower limits in integration tests. |
+| DEC-020 | Content sniffing rejects NUL bytes and high-control-byte samples as binary-looking content before text decoding. | Accepted | Binary-looking allowed-extension files produce warnings and are not stored as source artifacts. |
+| DEC-021 | ZIP validation rejects path traversal, absolute paths, Windows-drive-style paths, symlinks, nested archive extensions, duplicate normalized paths, encrypted entries, and decompression limit violations before any artifact write. | Accepted | Unsafe ZIPs leave no source artifacts and restore project state to the previous stable state. |
+| DEC-022 | Source viewer receives API-escaped source lines and renders them as escaped HTML with line numbers. | Accepted | Uploaded source remains untrusted and cannot become executable UI markup. |
 
 ## Requirement Conflicts Or Tensions
 
@@ -135,8 +146,8 @@ This is metadata, not a new statement state.
 | SEC-GATE-002 | Session cookie flags and invalidation behavior. | Resolved in ADR-002: HTTP-only, `SameSite=Lax`, environment-specific `Secure`, server-side invalidation. | No |
 | SEC-GATE-003 | Password policy and seed-user handling. | Resolved in ADR-002: secure hash, generic errors, dev seed only under `APP_ENV=development`, password from environment. | No |
 | SEC-GATE-004 | Rate-limit algorithm and storage. | Resolved in ADR-002: login rate limit by IP and account identifier hash; AI rate limiting in Phase 5. | No |
-| SEC-GATE-005 | ZIP symlink, nested ZIP, path length, Unicode normalization, and entry-count limits. | Locked as Phase 2 ingestion requirements. | No |
-| SEC-GATE-006 | Content sniffing vs extension-only allowlist. | Decide exact sniffing implementation in Phase 2; not needed for Phase 1 foundation. | No |
+| SEC-GATE-005 | ZIP symlink, nested ZIP, path length, Unicode normalization, and entry-count limits. | Resolved in Phase 2 and covered by integration tests. | No |
+| SEC-GATE-006 | Content sniffing vs extension-only allowlist. | Resolved in Phase 2: extension allowlist plus binary-looking content sniffing. | No |
 | SEC-GATE-007 | Export authorization and exported file retention. | Decide in Phase 7 export implementation. | No |
 | SEC-GATE-008 | Audit log tamper resistance/retention. | Phase 1 records append-only audit events; stronger tamper resistance/retention is Phase 7/post-MVP. | No |
 | SEC-GATE-009 | AI prompt-injection handling. | Phase 5 AI adapter must treat source as hostile and instruction-isolated. | No |
@@ -159,14 +170,14 @@ This is metadata, not a new statement state.
 
 ## Remaining Open Assumptions
 
-| ID | Assumption | Phase affected | Blocking Phase 1? |
+| ID | Assumption | Phase affected | Status / blocking impact |
 |---|---|---|---|
-| OPEN-001 | Exact ZIP scanner numeric limits for entry count, path length, nesting, and decompression ratio. | Phase 2 | No |
+| OPEN-001 | Exact ZIP scanner numeric limits for entry count, path length, nesting, and decompression ratio. | Phase 2 | Resolved in DEC-019. |
 | OPEN-002 | Exact upload progress implementation details for 100 MB local upload. | Phase 2/7 | No |
 | OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
 | OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
 
-Phase 1 blocking assumptions: none.
+Phase 2 blocking assumptions: none.
 
 ## Assumption Update Rule
 

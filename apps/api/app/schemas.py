@@ -83,6 +83,53 @@ class ProjectOut(BaseModel):
     archive_reason: str | None
 
 
+class SourceArtifactOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    original_path: str
+    storage_path: str
+    file_extension: str
+    size_bytes: int
+    sha256: str
+    encoding: str
+    line_count: int
+    analysis_status: str
+    candidate_count: int
+    created_by: str
+    created_at: datetime
+
+
+class IngestionWarningOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    artifact_id: str | None
+    original_path: str
+    warning_code: str
+    message: str
+    created_by: str
+    created_at: datetime
+
+
+class SourceUploadResponse(BaseModel):
+    project: ProjectOut
+    artifacts: list[SourceArtifactOut]
+    warnings: list[IngestionWarningOut]
+
+
+class SourceContentLine(BaseModel):
+    number: int
+    escaped_html: str
+
+
+class SourceContentResponse(BaseModel):
+    artifact: SourceArtifactOut
+    lines: list[SourceContentLine]
+
+
 class AuditEventOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,4 +146,3 @@ class HealthResponse(BaseModel):
     status: str
     database: str
     worker: str | None = None
-

@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from apps.api.app.bootstrap import seed_development_user
 from apps.api.app.config import Settings
 from apps.api.app.database import Base, make_engine, make_session_factory
-from apps.api.app.routers import auth, health, projects, review_stub
+from apps.api.app.routers import artifacts, auth, health, projects, review_stub
 
 
 @asynccontextmanager
@@ -56,9 +56,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(projects.router, prefix="/api/v1")
+    app.include_router(artifacts.router, prefix="/api/v1")
     app.include_router(review_stub.router, prefix="/api/v1")
     return app
 
 
 app = create_app()
-

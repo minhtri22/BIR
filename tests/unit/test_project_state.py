@@ -21,6 +21,17 @@ def test_upload_after_export_ready_revokes_readiness_through_ingesting() -> None
     assert next_status_for_source_upload("export_ready") == "ingesting"
 
 
+def test_failed_additional_ingestion_can_restore_previous_stable_state() -> None:
+    transition = assert_project_transition(
+        "ingesting",
+        "export_ready",
+        "system",
+        "fail_or_cancel_ingestion",
+    )
+
+    assert transition.audit_event == "INGESTION_FAILED_OR_CANCELLED"
+
+
 def test_archived_project_cannot_transition() -> None:
     with pytest.raises(ProjectStateError, match="Archived projects cannot transition"):
         assert_project_transition("archived", "draft", "admin")
@@ -34,4 +45,3 @@ def test_patch_style_arbitrary_status_change_is_not_a_domain_command() -> None:
 def test_archive_requires_admin_actor() -> None:
     with pytest.raises(ProjectStateError, match="Actor analyst cannot transition"):
         assert_project_transition("draft", "archived", "analyst", "archive_project")
-

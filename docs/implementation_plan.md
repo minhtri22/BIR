@@ -1,8 +1,8 @@
 # Business Forensics Platform MVP Implementation Plan
 
-Date: 2026-08-05
-Phase: 0 - Audit, plan, and revision gate
-Status: Conditional revision complete; Phase 1 remains blocked until user review approves Phase 0.
+Date: 2026-08-06
+Phase: 2 - Secure source ingestion
+Status: Phase 2 PASS candidate for gate review; Phase 3 not started.
 
 Source documents:
 
@@ -246,7 +246,7 @@ Goal:
 
 Accept source uploads safely and create immutable source inventory.
 
-Key deliverables:
+Implemented deliverables:
 
 - Upload endpoint for text files and ZIP packages.
 - Safe ZIP extraction with path traversal, symlink, nested archive, entry count, ratio, path length, Unicode normalization, and uncompressed size protections.
@@ -256,6 +256,13 @@ Key deliverables:
 - SHA-256, encoding detection, line count, immutable storage path, inventory API.
 - Source viewer UI with line numbers and safe HTML escaping.
 - Audit events for upload/ingest.
+
+Phase 2 acceptance evidence:
+
+- Python unit/integration tests: `23 passed`.
+- Playwright E2E: `2 passed`, including upload -> inventory -> escaped source viewer.
+- Alembic migration `0002_phase2_source_ingestion` passed on SQLite and PostgreSQL via Compose.
+- Docker Compose API, worker, and web rebuilt and started.
 
 ### Phase 3 - Static extraction
 

@@ -1,6 +1,6 @@
 # Business Forensics Platform
 
-Phase 1 foundation for the Business Forensics Platform MVP.
+Phase 2 secure source ingestion for the Business Forensics Platform MVP.
 
 ## Stack
 
@@ -28,6 +28,7 @@ $env:AUTO_CREATE_DB = "true"
 $env:DATABASE_URL = "sqlite:///./test-tmp/app.db"
 $env:DEV_SEED_EMAIL = "admin@example.com"
 $env:DEV_SEED_PASSWORD = "<set a local password>"
+$env:ARTIFACT_STORAGE_ROOT = "./runtime-artifacts"
 .\.venv\Scripts\python -m uvicorn apps.api.app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -69,17 +70,17 @@ Frontend type/build check:
 npm run web:build
 ```
 
-Mandatory Phase 1 E2E:
+Playwright E2E:
 
 ```powershell
 npm run test:e2e
 ```
 
-Phase 1 cannot be marked `PASS` unless the Playwright flow `login -> create project -> project appears in list` passes.
+The suite covers the Phase 1 mandatory flow and the Phase 2 upload -> inventory -> escaped source viewer flow.
 
-## Phase 1 Scope
+## Implemented Scope
 
-Implemented foundation behavior:
+Foundation behavior:
 
 - Opaque server-side sessions in HTTP-only cookies.
 - CSRF protection for state-changing requests.
@@ -92,4 +93,14 @@ Implemented foundation behavior:
 - Audit events for login/logout and project create/update/archive.
 - API and worker health endpoints.
 
-Physical project deletion, source upload, extraction, review workflow, AI adapter, behavioral tests, and export remain later phases.
+Secure ingestion behavior:
+
+- Text and ZIP source upload.
+- Immutable artifact storage under generated paths.
+- Artifact inventory with SHA-256, encoding, line count, size, analysis status, and candidate count.
+- ZIP traversal, symlink, nested archive, entry count, path length, decompression ratio, and total uncompressed size protections.
+- Binary-looking and unsupported file warnings.
+- Source viewer with line numbers and escaped untrusted source content.
+- Project state and audit events for upload/ingestion success and failure.
+
+Physical project deletion, extraction, evidence persistence, review workflow, AI adapter, behavioral tests, and export remain later phases.

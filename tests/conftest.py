@@ -17,6 +17,7 @@ from apps.api.app.security import hash_password
 def client() -> Generator[TestClient, None, None]:
     runtime_dir = Path("runtime-tests")
     runtime_dir.mkdir(exist_ok=True)
+    artifact_dir = runtime_dir / f"artifacts-{uuid4()}"
     settings = Settings(
         app_env="test",
         database_url=f"sqlite:///{runtime_dir / f'{uuid4()}.db'}",
@@ -24,6 +25,7 @@ def client() -> Generator[TestClient, None, None]:
         auto_create_db=True,
         login_rate_limit_attempts=3,
         login_rate_limit_window_seconds=300,
+        artifact_storage_root=str(artifact_dir),
     )
     app = create_app(settings)
     with TestClient(app) as test_client:

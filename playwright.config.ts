@@ -8,6 +8,7 @@ const apiEnv = {
   DATABASE_URL: 'sqlite:///./test-tmp/e2e.db',
   DEV_SEED_EMAIL: 'admin@example.com',
   DEV_SEED_PASSWORD: 'phase1-e2e-password',
+  ARTIFACT_STORAGE_ROOT: './test-tmp/e2e-artifacts',
   CORS_ALLOWED_ORIGINS: 'http://127.0.0.1:15173'
 };
 

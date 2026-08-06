@@ -1,8 +1,8 @@
 # Assumptions, Open Questions, and MVP Risk Register
 
 Date: 2026-08-06
-Phase: 3 static extraction implementation
-Status: Phase 3 implementation `CLOSED_PASS`; Phase 4 not started.
+Phase: Phase 4 Epic 4.1 review domain design
+Status: Epic 4.1 design contract drafted; implementation not started.
 
 ## Locked Principles
 
@@ -10,8 +10,11 @@ These are not assumptions and must not be weakened during MVP delivery:
 
 - AI/static extractor only creates `candidate`.
 - Only reviewer can verify.
+- Verified is a contextual review fact, not ground truth.
 - Every `BusinessStatement` requires at least one evidence reference.
 - Verified statement changes require revision and lineage.
+- Review records are append-only.
+- Review never edits candidate content or original evidence.
 - No cross-customer semantic learning.
 - No best-practice normalization.
 - No source upload execution.
@@ -87,12 +90,22 @@ The Phase 3 design received Architect `CLOSED_PASS_DESIGN` on 2026-08-06. Implem
 | DEC-037 | Static extractor is insert-only for `BusinessStatement`, `Evidence`, `AnalysisGap`, and `UnresolvedQuestion`; no candidate `UPDATE`, `UPSERT`, merge, or lineage mutation is allowed in Phase 3. | Implemented | Cross-run candidate lineage is deferred to Phase 4 review/revision semantics. |
 | DEC-038 | From Phase 4 onward, delivery is split into independently reviewed Epics instead of one large Phase -> Code -> Review cycle. | Accepted by Architect on 2026-08-06 | Phase 4 starts with Epic 4.1 Review Domain and does not close until all required Phase 4 Epics pass review. |
 
+## Phase 4 Epic 4.1 Decisions Locked During Design
+
+| ID | Decision | Status | Impact |
+|---|---|---|---|
+| DEC-039 | `docs/implementation_contract/epic4_1_review_domain_contract.md` is the Epic 4.1 Review Domain design baseline. | Drafted for Architect Review | No Phase 4 implementation code should begin until this contract receives design approval. |
+| DEC-040 | Review is human validation, not approval workflow; BIR must not treat review as BPM, DMN, workflow engine, rule engine, AI suggestion, or export logic. | Drafted for Architect Review | Keeps Epic 4.1 focused on domain semantics for reviewer decisions and immutable history. |
+| DEC-041 | `verified` is not ground truth. It means reviewed and accepted under a specific context, by a specific reviewer, at a specific time, using a specific evidence snapshot. | Drafted for Architect Review | Review history and future export/lineage must preserve context, reviewer, time, and snapshot provenance. |
+| DEC-042 | Review is append-only: reviewer commands create `ReviewRecord`; review never edits candidate content or original `Evidence`; statement status changes are derived outcomes written atomically by the review service. | Drafted for Architect Review | Protects forensic history while allowing deterministic state transitions such as `candidate -> verified`. |
+| DEC-043 | Epic 4.1 state design includes `candidate`, `verified`, `rejected`, `obsolete`, and `superseded`; `candidate -> obsolete` is forbidden, and `superseded` is reserved for later revision lineage. | Drafted for Architect Review | Updates the prior obsolete representation tension while preserving historically valid statements. |
+
 ## Requirement Conflicts Or Tensions
 
 | ID | Issue | Locked Phase 0 resolution | Blocking current phase? |
 |---|---|---|---|
 | CLAR-001 | SRS required evidence for candidate statements while BA allowed candidate without evidence as `unknown_behavior`. | Every `BusinessStatement` must have at least one evidence reference. If the analyst knows there is an unresolved area but cannot create a valid evidence-backed statement, use `AnalysisGap` or `UnresolvedQuestion`. `unknown_behavior`, if used as a statement type, must still link to evidence showing unresolved behavior. | No |
-| CLAR-002 | Technical review and business review were described, but MVP has one `reviewer` role. | MVP uses one `reviewer` role. A single valid reviewer decision can verify. Every decision must include `review_context`: `technical`, `business`, or `combined`. Review decisions should support `confidence_source` when available. Export includes review context and should include confidence source. No two-stage approval gate in MVP. | No |
+| CLAR-002 | Technical review and business review were described, but MVP has one `reviewer` role. | MVP uses one `reviewer` role. A single valid reviewer decision can verify. Every decision must include `review_context`: `technical`, `business`, `combined`, or `manual`. Review decisions should support `confidence_source` when available. Export includes review context and should include confidence source. No two-stage approval gate in MVP. | No |
 | CLAR-003 | `merge_candidates` could conflict with no auto-merge and contradiction preservation. | Manual merge creates a new candidate or statement revision. Source candidates are not deleted; they become `superseded`; lineage and evidence links are preserved. Merge is blocked when unresolved scope conflict remains. | No |
 | CLAR-004 | SRS says one behavioral test per verified rule, while BA export readiness allows documented exceptions. | Export readiness requires each verified rule to have either a linked behavioral test or documented exception/warning. | No |
 | CLAR-005 | Secure session mechanism was undecided. | Resolved by ADR-002: opaque server-side session, HTTP-only cookie, CSRF, timeouts, server-side invalidation. | No |
@@ -100,7 +113,7 @@ The Phase 3 design received Architect `CLOSED_PASS_DESIGN` on 2026-08-06. Implem
 | CLAR-007 | Physical deletion was mentioned but conflicts with immutable artifacts and audit expectations. | Physical deletion is deferred outside MVP. No delete project API or UI. Archive only. | No |
 | CLAR-008 | Real AI provider scope could expand unexpectedly. | Mock adapter is mandatory. Real provider is optional stretch scope; Phase 5 can pass with mock adapter if boundaries are proven. | No |
 | CLAR-009 | Project status transitions and rollback rules were incomplete. | Project state machine is locked in `implementation_plan.md`, including allowed transitions, actors, preconditions, invalid transitions, archive behavior, and source upload after `export_ready`. | No |
-| CLAR-010 | `mark_obsolete_candidate` did not match the statement state machine. | Do not add `obsolete` status in MVP. Store structured `historical_validity` metadata tied to a review decision. Do not delete historically valid statements. | No |
+| CLAR-010 | `mark_obsolete_candidate` did not match the statement state machine. | Superseded by Epic 4.1 design decision DEC-043: `obsolete` becomes a Review Domain state only after a statement has been `verified`; `candidate -> obsolete` remains forbidden; historically valid statements are not deleted. | No |
 
 ## Evidence, Unknown Behavior, Gaps, and Questions
 
@@ -117,9 +130,11 @@ Official Phase 0 rule:
 Review:
 
 - One `reviewer` role is used in MVP.
-- `review_context` is required with values `technical`, `business`, or `combined`.
+- `review_context` is required with values `technical`, `business`, `combined`, or `manual`.
 - `confidence_source` should be stored as a list when available, with values such as `source_code`, `sme_interview`, `operating_manual`, `database`, or `runtime_log`.
 - One valid reviewer decision is sufficient to verify in MVP.
+- `verified` is contextual: it must preserve reviewer, time, context, and immutable evidence snapshot, and must not be presented as ground truth.
+- Reviewer commands create append-only review history and do not edit candidate content or original evidence.
 - Export must include the review context.
 - Export should include `confidence_source` when review decisions provide it.
 
@@ -202,7 +217,7 @@ This is metadata, not a new statement state.
 
 Phase 3 implementation blocking assumptions: none. Phase 3 closed as `CLOSED_PASS`.
 
-Phase 4 implementation must follow the Epic delivery model in DEC-038. No Phase 4 code should begin until the intended Epic scope is explicit.
+Phase 4 implementation must follow the Epic delivery model in DEC-038. No Epic 4.1 code should begin until `docs/implementation_contract/epic4_1_review_domain_contract.md` receives Architect design approval.
 
 ## Assumption Update Rule
 

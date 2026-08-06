@@ -1,8 +1,8 @@
 # Project Progress
 
 Date: 2026-08-06
-Current phase: Phase 3 - Static Extraction
-Status: Phase 3 implementation `CLOSED_PASS`; Phase 4 not started
+Current phase: Phase 4 - Epic 4.1 Review Domain Design
+Status: Epic 4.1 design contract drafted; implementation not started
 
 ## Phase 0
 
@@ -166,6 +166,32 @@ Phase 3 implementation gate:
 - Architect review confirmed scope discipline, migration quality, idempotency, active-job enforcement, server-owned analyzer identity, insert-only candidate invariant, evidence provenance, candidate queue UI, and test coverage.
 - Phase 3 remains the baseline for Phase 4 review workflow work.
 
+## Phase 4 Epic 4.1 Review Domain Design Summary
+
+Created design-only contract:
+
+- `docs/implementation_contract/epic4_1_review_domain_contract.md`
+
+The contract defines:
+
+- Review Domain as human validation, not approval workflow.
+- Out-of-scope boundaries for AI, workflow engine, BPM, DMN, rule engine, merge, export, glossary, behavioral tests, and runtime.
+- Domain model for `ReviewDecision`, `ReviewRecord`, `ReviewSession`, `ReviewReason`, `ReviewContext`, `ReviewEvidenceSnapshot`, `ReviewOutcome`, `ReviewAttachment`, `ReviewFlag`, and `ReviewConflictMarker`.
+- BusinessStatement review statuses: `candidate`, `verified`, `rejected`, `obsolete`, and `superseded`.
+- Forbidden `candidate -> obsolete` transition.
+- Immutable ReviewRecord, ReviewDecision, and ReviewEvidenceSnapshot semantics.
+- `verified` as a contextual review fact, not ground truth.
+- API and UI contracts for review sessions, review decisions, review queue, pending/verified/rejected lists, evidence viewer, decision panel, and history.
+- Atomic transaction semantics for review decision, review record, evidence snapshot, audit, and derived statement status outcome.
+- Test matrix for unit, integration, migration, RBAC, immutable review, state transition, evidence snapshot, audit, E2E, and no-execution architectural checks.
+
+No Phase 4 implementation code, migration, API route, UI component, AI adapter, merge logic, behavioral test, dashboard, or export implementation was added.
+
+Epic 4.1 design gate:
+
+- Status: `DESIGN_DRAFT`.
+- Awaiting Architect Review.
+
 ## Commands Run
 
 Phase 3 implementation:
@@ -267,7 +293,7 @@ Phase 3 implemented:
 
 - Redis host port is `6380` to avoid an existing local port `6379` collision; API/worker still use internal Compose host `redis:6379`.
 - PostgreSQL host port is `55432` to avoid an existing local port `5432` collision; Compose services still use `db:5432`.
-- Full review workflow endpoint is only an RBAC-protected Phase 1 stub; implementation starts in Phase 4.
+- Full review workflow endpoint is only an RBAC-protected Phase 1 stub; Epic 4.1 currently adds design only.
 - Review workflow, AI adapter, behavioral tests, dashboard, and export remain later phases.
 - The default MVP upload limit is 20 MB. `MAX_UPLOAD_BYTES` remains environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP by Product Owner decision on 2026-08-06.
 - Export usage of artifact hashes remains deferred until export models exist.
@@ -277,13 +303,20 @@ Phase 3 implemented:
 
 Open assumptions remain in `docs/assumptions.md`.
 
-Phase 3 implementation blocking assumptions:
+Epic 4.1 design blocking assumptions:
 
-- None. Phase 3 is closed as `CLOSED_PASS`.
+- None for drafting the design contract.
+- Implementation remains blocked until Architect Review approves the Epic 4.1 contract.
 
 ## Next Phase
 
-Phase 4 review workflow, not started:
+Phase 4 Epic 4.1 Review Domain:
+
+- Design drafted.
+- Implementation not started.
+- Awaiting Architect Review.
+
+Phase 4 review workflow, implementation not started:
 
 - Human review decisions.
 - Reviewer verification gate.

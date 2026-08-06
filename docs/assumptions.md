@@ -1,8 +1,8 @@
 # Assumptions, Open Questions, and MVP Risk Register
 
 Date: 2026-08-06
-Phase: 2 secure source ingestion
-Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending.
+Phase: 3 static extraction design
+Status: Phase 3 implementation contract drafted; implementation blocked pending Architect `CLOSED_PASS_DESIGN`.
 
 ## Locked Principles
 
@@ -67,6 +67,16 @@ These are not assumptions and must not be weakened during MVP delivery:
 | DEC-024 | Artifact content is integrity-checked by SHA-256 before source viewer decode. | Accepted | Tampered artifact files are rejected and audited as `ARTIFACT_INTEGRITY_MISMATCH`. |
 | DEC-025 | Encoding detection checks `cp932` and `shift_jis` before `cp1252` and `latin-1`; Latin-1 fallback is low confidence. | Accepted | Legacy Japanese source is identified more accurately, and Latin-1 fallback creates a warning. |
 | DEC-026 | MVP default upload limit remains 20 MB; `MAX_UPLOAD_BYTES` stays environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP. | Accepted by Product Owner on 2026-08-06 | Resolves OPEN-002 and removes the Phase 2 documentation blocker. |
+
+## Phase 3 Design Proposals Pending Architect Review
+
+These are design proposals, not implementation authorization:
+
+| ID | Proposal | Status | Impact |
+|---|---|---|---|
+| P3-DES-001 | Create `docs/implementation_contract/phase3_static_extraction_contract.md` as the Phase 3 design baseline. | Pending Architect `CLOSED_PASS_DESIGN` | Phase 3 implementation must not begin until this is approved. |
+| P3-DES-002 | Add a new Alembic migration `0003_phase3_static_extraction` during implementation for analyzer versions, analysis jobs, chunks, candidates, evidence, gaps, and unresolved questions. | Pending Architect `CLOSED_PASS_DESIGN` | Existing migrations remain immutable. |
+| P3-DES-003 | Add explicit analysis failure/cancel project transition before implementation, because ADR-003 currently defines completion but not failure recovery for analysis. | Pending Architect `CLOSED_PASS_DESIGN` | Blocks implementation failure/retry semantics until accepted or replaced. |
 
 ## Requirement Conflicts Or Tensions
 
@@ -180,8 +190,9 @@ This is metadata, not a new statement state.
 | OPEN-002 | Product decision for SRS `Upload 100 MB có progress`. | Phase 2/7 | Resolved in DEC-026: MVP default is 20 MB, the limit remains environment-configurable, and 100 MB/progress is deferred to Phase 7 or post-MVP. |
 | OPEN-003 | Export retention period and cleanup policy. | Phase 7 | No |
 | OPEN-004 | Stakeholder validation of statement readability and export usefulness. | Product validation, post-slice | No |
+| OPEN-005 | ADR-003 does not yet define `fail_or_cancel_analysis` or equivalent analysis failure recovery. | Phase 3 | Blocks Phase 3 implementation until Architect approves the contract proposal or provides a different transition. |
 
-Phase 2 blocking assumptions: none after DEC-026; gate review still decides final Phase 2 status.
+Phase 3 implementation blocking assumptions: OPEN-005 and Architect `CLOSED_PASS_DESIGN`.
 
 ## Assumption Update Rule
 

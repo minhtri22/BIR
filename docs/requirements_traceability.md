@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: Phase 4 Epic 4.1 review domain design
-Status: Epic 4.1 design contract drafted; implementation not started.
+Status: Epic 4.1 design revision drafted after Architect `REVISION_REQUIRED`; implementation not started.
 
 Sources:
 
@@ -40,12 +40,12 @@ Status legend:
 | REQ-017 | SRS Section 7 UC-05; SRS Section 10.4 BusinessStatement; BA Object 10.4; BA BR-003 | Candidate statement contains ID, type, title, text, scope, confidence, status, evidence count, unresolved items, extraction method, created metadata. | Confidence is extractor confidence, not a substitute for review. | Statement Service, Candidate UI; statement list/detail APIs | Phase 3 | Implemented | Candidate schema/API integration tests, candidate queue UI, computed evidence count |
 | REQ-018 | SRS Section 7 UC-05/UC-06; SRS Section 10.4/10.5; BA BP-03; BA BR-006, BR-016 | Each `BusinessStatement` links to at least one evidence range. | No evidence-less `BusinessStatement`; use `AnalysisGap` or `UnresolvedQuestion` when evidence is not sufficient for a statement. | Statement Service, Evidence Service; Candidate detail UI | Phase 3/4 | Implemented for candidate creation | Integration tests assert every candidate has evidence; DB exactly-one-target evidence constraint; gaps/questions are persisted for uncertainty |
 | REQ-019 | SRS Section 10.5 Evidence; BA Evidence model; BA BR-006 | Evidence includes file, lines, excerpt, artifact hash, evidence type, relation type, analyst note. | Evidence excerpt cannot be edited as original source; evidence points to artifact hash and source position. | Evidence Service, Storage; Evidence API and detail UI | Phase 2/3/4 | Partially implemented | Phase 3 evidence schema includes artifact hash, artifact ID, chunk, line range, immutable excerpt, relation type, extraction method, analyzer version, and `analysis_job_id`; analyst notes remain Phase 4 |
-| REQ-020 | SRS Section 7 UC-07; BA BP-04/BP-05/BP-06; BA BR-004, BR-005, BR-007, BR-015 | Reviewer can confirm/reject/request evidence/mark conflict/mark obsolete/split/merge with lineage. | Review decisions require reviewer, timestamp, reason, before/after state, context, and evidence snapshot; merge lineage remains later Epic scope. | Review Service, Statement state machine, Audit; review API and UI | Phase 4 | Planned | Epic 4.1 design contract defines Review Domain; implementation still requires review action, lineage, and audit tests |
-| REQ-021 | SRS Section 6 Principles; SRS Section 7 UC-07; BA Review decision table; BA BR-001, BR-003 | Only reviewer can verify. | Human promotion gate; `verified` is contextual review fact, not ground truth. | Review Service, RBAC; review API/UI actions | Phase 4 | Planned | Epic 4.1 design contract; implementation must cover TC-05 and TC-10 |
-| REQ-022 | SRS Section 6 Principles; SRS Section 20 TC-06; BA BR-001 | Verify without valid evidence is blocked. | Verified statement requires at least one immutable evidence snapshot. | Review Service, Evidence validation; review API | Phase 4 | Planned | Epic 4.1 design contract; implementation must cover TC-06 and snapshot integrity tests |
-| REQ-023 | SRS Section 8.2 Candidate statement; SRS Section 20 TC-07; BA BR-005 | Verified statement cannot be edited directly. | Review is append-only; statement content and original evidence are not edited by reviewer; later changes require revision/lineage. | Statement Service, Review Service, Revision Service; revise API | Phase 4 | Planned | Epic 4.1 design contract; implementation must cover TC-07 and no-content-edit tests |
-| REQ-024 | SRS Section 10.6 ReviewDecision; SRS Section 10.11 AuditEvent; BA BR-004, BR-013 | Review state changes produce `ReviewDecision` and `AuditEvent`. | No deletion of review history; ReviewRecord and ReviewDecision are immutable. | Review Service, Audit; review API and review history UI | Phase 4 | Planned | Epic 4.1 design contract; implementation must cover TC-14 and audit history tests |
-| REQ-025 | SRS Section 7 UC-09; BA BP-07; BA BR-009 | Conflict records link two or more statements and preserve contradictions until reviewer resolution. | System cannot automatically choose a winner; Epic 4.1 duplicate/conflict markers do not merge or supersede. | Review Conflict Marker, later Conflict Service; conflict CRUD and workspace UI | Phase 4/6 | Planned | Epic 4.1 design contract; implementation must cover TC-08 no-auto-winner behavior |
+| REQ-020 | SRS Section 7 UC-07; BA BP-04/BP-05/BP-06; BA BR-004, BR-005, BR-007, BR-015 | Reviewer can confirm/reject/request evidence/mark conflict/mark obsolete/split/merge with lineage. | Review decisions require reviewer, timestamp, structured reason, context, and evidence snapshot; `OBSOLETE` is not a review decision, and obsolete/supersede lifecycle changes belong to Epic 4.4 Revision Lineage. | Review Service, Statement state machine, Audit; review API and UI | Phase 4 | Planned | Epic 4.1 revised design contract defines Review Domain; implementation still requires review action, lineage, and audit tests |
+| REQ-021 | SRS Section 6 Principles; SRS Section 7 UC-07; BA Review decision table; BA BR-001, BR-003 | Only reviewer can verify. | Human promotion gate; `verified` is contextual review fact, not ground truth. | Review Service, RBAC; review API/UI actions | Phase 4 | Planned | Epic 4.1 revised design contract; implementation must cover TC-05 and TC-10 |
+| REQ-022 | SRS Section 6 Principles; SRS Section 20 TC-06; BA BR-001 | Verify without valid evidence is blocked. | Verified statement requires at least one immutable evidence snapshot. | Review Service, Evidence validation; review API | Phase 4 | Planned | Epic 4.1 revised design contract; implementation must cover TC-06 and snapshot integrity tests |
+| REQ-023 | SRS Section 8.2 Candidate statement; SRS Section 20 TC-07; BA BR-005 | Verified statement cannot be edited directly. | Review is append-only; statement content and original evidence are not edited by reviewer; later changes require revision/lineage. | Statement Service, Review Service, Revision Service; revise API | Phase 4 | Planned | Epic 4.1 revised design contract; implementation must cover TC-07 and no-content-edit tests |
+| REQ-024 | SRS Section 10.6 ReviewDecision; SRS Section 10.11 AuditEvent; BA BR-004, BR-013 | Review state changes produce `ReviewDecision` and `AuditEvent`. | No deletion of review history; ReviewRecord and ReviewDecision are immutable; ReviewOutcome is derived, not persisted. | Review Service, Audit; review API and review history UI | Phase 4 | Planned | Epic 4.1 revised design contract; implementation must cover TC-14 and audit history tests |
+| REQ-025 | SRS Section 7 UC-09; BA BP-07; BA BR-009 | Conflict records link two or more statements and preserve contradictions until reviewer resolution. | System cannot automatically choose a winner; Epic 4.1 duplicate/conflict markers do not merge or supersede. | Review Conflict Marker, later Conflict Service; conflict CRUD and workspace UI | Phase 4/6 | Planned | Epic 4.1 revised design contract; implementation must cover TC-08 no-auto-winner behavior |
 | REQ-026 | SRS Section 7 UC-08; BA Capability 4; BA BR-011 | Glossary terms are project-scoped. | Glossary cannot automatically impose terminology on unreviewed candidates. | Glossary Service; glossary CRUD and UI | Phase 6 | Planned | Glossary CRUD tests, no-auto-apply test |
 | REQ-027 | SRS Section 7 UC-10; BA BP-08; BA Acceptance Criteria 7; BA BR-013 | Behavioral test cases are created from verified statements. | Test failure does not automatically invalidate statement; manual/simulated execution only. | Behavioral Test Service; behavioral-test CRUD and manual execution UI | Phase 6 | Planned | Behavioral test CRUD, verified-link validation, manual execution tests |
 | REQ-028 | SRS Section 7 UC-12; BA BP-09; BA BR-012 | Every verified rule should have at least one behavioral test or documented exception. | Export readiness warns/blocks according to readiness policy. | Behavioral Test Service, Dashboard, Export validation | Phase 7 | Planned | Dashboard coverage tests, export readiness tests |
@@ -140,7 +140,7 @@ Implementation evidence:
 
 ## Phase 4 Epic 4.1 Design Gate
 
-Design status: `DESIGN_DRAFT`.
+Design status: `DESIGN_REVISION_DRAFT`.
 
 Implementation status: not started.
 
@@ -154,9 +154,13 @@ The Epic 4.1 contract defines:
 - `verified` as contextual review fact, not ground truth.
 - Append-only `ReviewRecord` and immutable `ReviewDecision`.
 - Immutable `ReviewEvidenceSnapshot`.
+- `analysis_job_id` as required evidence snapshot provenance.
+- Structured `ReviewReason` as `reason_code` plus `reason_detail`.
+- One active `ReviewSession` per `BusinessStatement`.
+- `ReviewOutcome` as derived read-model concept, not persisted state.
+- No `ReviewRecord` to `ReviewRecord` references.
 - Reviewer commands that do not edit candidate content or original evidence.
-- BusinessStatement review states: `candidate`, `verified`, `rejected`, `obsolete`, and `superseded`.
-- Forbidden `candidate -> obsolete` transition.
+- `ReviewDecision` values exclude `OBSOLETE`; obsolete lifecycle transition is deferred to Epic 4.4.
 - API/UI contract for review sessions, review decisions, queue, pending/verified/rejected lists, and history.
 - Test matrix for RBAC, immutable review, state transition, evidence snapshot, audit, and no-execution.
 
@@ -206,4 +210,4 @@ Phase 3 implementation coverage:
 - Phase 3 migration, API, worker actor, extraction package, candidate/evidence UI, tests, and E2E are implemented.
 - Phase 3 implementation is `CLOSED_PASS`.
 - Phase 4 will be delivered by independently reviewed Epics: Review Domain, Review API, Review UI, Revision Lineage, and Review Audit.
-- Epic 4.1 Review Domain design contract is drafted for Architect Review; no Phase 4 implementation code exists yet.
+- Epic 4.1 Review Domain design contract revision is drafted for Architect Review; no Phase 4 implementation code exists yet.

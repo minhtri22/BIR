@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Current phase: Phase 4 - Epic 4.1 Review Domain Design
-Status: Epic 4.1 design contract drafted; implementation not started
+Status: Epic 4.1 design revision drafted after Architect `REVISION_REQUIRED`; implementation not started
 
 ## Phase 0
 
@@ -177,8 +177,13 @@ The contract defines:
 - Review Domain as human validation, not approval workflow.
 - Out-of-scope boundaries for AI, workflow engine, BPM, DMN, rule engine, merge, export, glossary, behavioral tests, and runtime.
 - Domain model for `ReviewDecision`, `ReviewRecord`, `ReviewSession`, `ReviewReason`, `ReviewContext`, `ReviewEvidenceSnapshot`, `ReviewOutcome`, `ReviewAttachment`, `ReviewFlag`, and `ReviewConflictMarker`.
-- BusinessStatement review statuses: `candidate`, `verified`, `rejected`, `obsolete`, and `superseded`.
-- Forbidden `candidate -> obsolete` transition.
+- `ReviewDecision` values for `VERIFY`, `REJECT`, `NEEDS_MORE_EVIDENCE`, `DUPLICATE`, `OUT_OF_SCOPE`, and `UNABLE_TO_DECIDE`.
+- `OBSOLETE` excluded from ReviewDecision because obsolete lifecycle handling belongs to Epic 4.4 Revision Lineage.
+- One active `ReviewSession` per `BusinessStatement`.
+- Required `analysis_job_id` provenance on ReviewEvidenceSnapshot.
+- Structured ReviewReason as `reason_code` plus `reason_detail`.
+- `ReviewOutcome` as derived from BusinessStatement state plus latest immutable ReviewRecord, not persisted.
+- Invariant that ReviewRecord never references another ReviewRecord.
 - Immutable ReviewRecord, ReviewDecision, and ReviewEvidenceSnapshot semantics.
 - `verified` as a contextual review fact, not ground truth.
 - API and UI contracts for review sessions, review decisions, review queue, pending/verified/rejected lists, evidence viewer, decision panel, and history.
@@ -189,7 +194,7 @@ No Phase 4 implementation code, migration, API route, UI component, AI adapter, 
 
 Epic 4.1 design gate:
 
-- Status: `DESIGN_DRAFT`.
+- Status: `DESIGN_REVISION_DRAFT`.
 - Awaiting Architect Review.
 
 ## Commands Run
@@ -306,13 +311,14 @@ Open assumptions remain in `docs/assumptions.md`.
 Epic 4.1 design blocking assumptions:
 
 - None for drafting the design contract.
-- Implementation remains blocked until Architect Review approves the Epic 4.1 contract.
+- Implementation remains blocked until Architect Review approves the Epic 4.1 revised contract.
 
 ## Next Phase
 
 Phase 4 Epic 4.1 Review Domain:
 
 - Design drafted.
+- Design revision drafted after Architect review.
 - Implementation not started.
 - Awaiting Architect Review.
 

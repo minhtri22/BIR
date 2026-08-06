@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: Phase 4 Epic 4.1 review domain design
-Status: Epic 4.1 design contract drafted; implementation not started.
+Status: Epic 4.1 design revision drafted after Architect `REVISION_REQUIRED`; implementation not started.
 
 ## Locked Principles
 
@@ -98,7 +98,12 @@ The Phase 3 design received Architect `CLOSED_PASS_DESIGN` on 2026-08-06. Implem
 | DEC-040 | Review is human validation, not approval workflow; BIR must not treat review as BPM, DMN, workflow engine, rule engine, AI suggestion, or export logic. | Drafted for Architect Review | Keeps Epic 4.1 focused on domain semantics for reviewer decisions and immutable history. |
 | DEC-041 | `verified` is not ground truth. It means reviewed and accepted under a specific context, by a specific reviewer, at a specific time, using a specific evidence snapshot. | Drafted for Architect Review | Review history and future export/lineage must preserve context, reviewer, time, and snapshot provenance. |
 | DEC-042 | Review is append-only: reviewer commands create `ReviewRecord`; review never edits candidate content or original `Evidence`; statement status changes are derived outcomes written atomically by the review service. | Drafted for Architect Review | Protects forensic history while allowing deterministic state transitions such as `candidate -> verified`. |
-| DEC-043 | Epic 4.1 state design includes `candidate`, `verified`, `rejected`, `obsolete`, and `superseded`; `candidate -> obsolete` is forbidden, and `superseded` is reserved for later revision lineage. | Drafted for Architect Review | Updates the prior obsolete representation tension while preserving historically valid statements. |
+| DEC-043 | `ReviewDecision` excludes `OBSOLETE`; obsolete and superseded lifecycle transitions are owned by Epic 4.4 Revision Lineage. | Revised for Architect Review | Reviewer may record evidence/flags suggesting a statement is no longer current, but Epic 4.1 cannot transition a statement to `obsolete`. |
+| DEC-044 | One `BusinessStatement` can have at most one active `ReviewSession`; a second active session returns HTTP `409` until the first session completes, cancels, or expires. | Revised for Architect Review | Prevents simultaneous session races such as one reviewer verifying while another rejects the same statement. |
+| DEC-045 | `ReviewEvidenceSnapshot` must include `analysis_job_id` in addition to artifact, line range, excerpt, SHA-256, and analyzer version provenance. | Revised for Architect Review | Review history can trace back to the exact Phase 3 analysis run. |
+| DEC-046 | `ReviewReason` is structured as `reason_code` plus optional `reason_detail`; free text alone is not sufficient. | Revised for Architect Review | Supports later dashboard and metric aggregation without losing reviewer context. |
+| DEC-047 | `ReviewOutcome` is derived from `BusinessStatement.status` and the latest immutable `ReviewRecord`; it is not persisted separately. | Revised for Architect Review | Avoids synchronization drift between outcome cache and statement/review history. |
+| DEC-048 | A `ReviewRecord` never references another `ReviewRecord`; review history is append-only by `statement_id`, not a linked list. | Revised for Architect Review | Keeps review history simple to query and prevents chained review dependencies. |
 
 ## Requirement Conflicts Or Tensions
 
@@ -113,7 +118,7 @@ The Phase 3 design received Architect `CLOSED_PASS_DESIGN` on 2026-08-06. Implem
 | CLAR-007 | Physical deletion was mentioned but conflicts with immutable artifacts and audit expectations. | Physical deletion is deferred outside MVP. No delete project API or UI. Archive only. | No |
 | CLAR-008 | Real AI provider scope could expand unexpectedly. | Mock adapter is mandatory. Real provider is optional stretch scope; Phase 5 can pass with mock adapter if boundaries are proven. | No |
 | CLAR-009 | Project status transitions and rollback rules were incomplete. | Project state machine is locked in `implementation_plan.md`, including allowed transitions, actors, preconditions, invalid transitions, archive behavior, and source upload after `export_ready`. | No |
-| CLAR-010 | `mark_obsolete_candidate` did not match the statement state machine. | Superseded by Epic 4.1 design decision DEC-043: `obsolete` becomes a Review Domain state only after a statement has been `verified`; `candidate -> obsolete` remains forbidden; historically valid statements are not deleted. | No |
+| CLAR-010 | `mark_obsolete_candidate` did not match the statement state machine. | Superseded by Epic 4.1 revision decision DEC-043: `OBSOLETE` is not a review decision; obsolete lifecycle transitions are deferred to Epic 4.4 Revision Lineage; historically valid statements are not deleted. | No |
 
 ## Evidence, Unknown Behavior, Gaps, and Questions
 
@@ -135,6 +140,10 @@ Review:
 - One valid reviewer decision is sufficient to verify in MVP.
 - `verified` is contextual: it must preserve reviewer, time, context, and immutable evidence snapshot, and must not be presented as ground truth.
 - Reviewer commands create append-only review history and do not edit candidate content or original evidence.
+- `ReviewDecision` excludes `OBSOLETE`; obsolete lifecycle handling belongs to Epic 4.4 Revision Lineage.
+- A statement can have only one active review session in MVP.
+- Review history is grouped by `statement_id`; `ReviewRecord` rows do not reference other `ReviewRecord` rows.
+- Review reasons use `reason_code` plus optional `reason_detail`.
 - Export must include the review context.
 - Export should include `confidence_source` when review decisions provide it.
 
@@ -147,7 +156,7 @@ Merge:
 - Evidence from A and B is retained as evidence links.
 - Merge is blocked when unresolved scope conflict exists.
 
-Obsolete/historic validity metadata:
+Obsolete/historic validity metadata before Epic 4.4:
 
 ```json
 {
@@ -156,12 +165,12 @@ Obsolete/historic validity metadata:
     "valid_from": null,
     "valid_to": null,
     "reason": "...",
-    "review_decision_id": "..."
+    "review_record_id": "..."
   }
 }
 ```
 
-This is metadata, not a new statement state.
+This is metadata/flagging, not an Epic 4.1 statement transition. Epic 4.4 Revision Lineage owns any eventual `obsolete` lifecycle state.
 
 ## Requirements That Are Not Yet Fully Testable
 
@@ -217,7 +226,7 @@ This is metadata, not a new statement state.
 
 Phase 3 implementation blocking assumptions: none. Phase 3 closed as `CLOSED_PASS`.
 
-Phase 4 implementation must follow the Epic delivery model in DEC-038. No Epic 4.1 code should begin until `docs/implementation_contract/epic4_1_review_domain_contract.md` receives Architect design approval.
+Phase 4 implementation must follow the Epic delivery model in DEC-038. No Epic 4.1 code should begin until the revised `docs/implementation_contract/epic4_1_review_domain_contract.md` receives Architect design approval.
 
 ## Assumption Update Rule
 

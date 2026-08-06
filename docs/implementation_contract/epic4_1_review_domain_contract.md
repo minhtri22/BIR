@@ -1,7 +1,7 @@
 # Epic 4.1 Review Domain Implementation Contract
 
 Date: 2026-08-06
-Status: DESIGN_DRAFT - awaiting Architect Review
+Status: DESIGN_REVISION_DRAFT - awaiting Architect Review
 Branch: `epic-4.1-review-domain-design`
 
 This contract is design-only. It defines the domain semantics for Phase 4 Epic 4.1 and must be reviewed before any implementation code, migration, API route, or UI work starts.
@@ -23,7 +23,7 @@ The allowed high-level reviewer outcomes are:
 - Confirm that a statement is accepted under context.
 - Reject a statement as inaccurate, out of scope, or unsupported.
 - Preserve uncertainty when evidence is insufficient.
-- Mark potential duplicate, conflict, or obsolete behavior without deleting history.
+- Mark potential duplicate, conflict, or evidence that may later support obsolete lifecycle handling without deleting history or changing obsolete state in Epic 4.1.
 
 `verified` does not mean ground truth. It means reviewed and accepted under a specific context, by a specific reviewer, at a specific time, using a specific immutable evidence snapshot.
 
@@ -57,10 +57,10 @@ The Review Domain may define fields needed for later lineage, conflict, and expo
 
 | Requirement | Business rule | Module | API/UI | Migration | Required tests |
 |---|---|---|---|---|---|
-| REQ-020 review actions | Review decisions require reviewer, timestamp, reason, before/after state, context, and immutable evidence snapshot. | Review Domain, Review Service, Statement state policy | Review decision API, review queue UI, history UI | Future Epic 4.1 migration for review records, decisions, snapshots, sessions, flags, conflict markers | Review action integration tests, state transition tests, immutable history tests |
+| REQ-020 review actions | Review decisions require reviewer, timestamp, reason, context, and immutable evidence snapshot. `OBSOLETE` is not a review decision and lifecycle obsolete handling belongs to Epic 4.4. | Review Domain, Review Service, Statement state policy | Review decision API, review queue UI, history UI | Future Epic 4.1 migration for review records, decisions, snapshots, sessions, flags, conflict markers | Review action integration tests, state transition tests, immutable history tests |
 | REQ-021 only reviewer verifies | Human reviewer is the only actor that can move a candidate to `verified`. | RBAC, Review Service | Create review decision API and decision panel | Reviewer FK on review record; audit actor fields | TC-05, TC-10, reviewer-role tests |
 | REQ-022 evidence required for verify | A statement cannot become `verified` unless it has at least one valid evidence snapshot. | Review Service, Evidence Snapshot Service | Decision API validation; evidence viewer | Evidence snapshot table with review record FK | TC-06, evidence snapshot tests |
-| REQ-023 verified cannot be edited directly | Review does not mutate statement content. Later changes require revision and lineage. | Statement policy, Review Domain | Statement detail read model; no edit endpoint for verified content | Review outcome records previous and next status only | TC-07, no direct edit tests |
+| REQ-023 verified cannot be edited directly | Review does not mutate statement content. Later changes require revision and lineage. | Statement policy, Review Domain | Statement detail read model; no edit endpoint for verified content | Review outcome is derived from statement state plus latest immutable review record, not persisted separately | TC-07, no direct edit tests |
 | REQ-024 review audit | Review state changes create immutable review decision history and audit event. | Review Service, Audit | Create decision API, history UI | Review record append-only tables and audit linkage | TC-14, audit-on-review tests |
 | REQ-025 conflict preservation | Contradictions and duplicates are marked, not auto-resolved. | Review Flag, Review Conflict Marker | Decision panel and conflict marker display | Conflict marker table, no winner field in Epic 4.1 | TC-08, no auto-winner test |
 | REQ-033 uncertainty preservation | `NEEDS_MORE_EVIDENCE` and `UNABLE_TO_DECIDE` preserve uncertainty without pretending it is business knowledge. | Review Flag, Analysis Gap bridge | Pending queue filters and history | Review flags linked to review records | Uncertainty/flag tests |
@@ -72,20 +72,27 @@ The Review Domain may define fields needed for later lineage, conflict, and expo
 
 ### `ReviewSession`
 
-Reviewer working session for one project and optionally a filtered queue.
+Reviewer working session for one project and one `BusinessStatement`.
 
 Purpose:
 
-- Record when a reviewer began and ended a review pass.
-- Group multiple review records created during the same human validation session.
+- Record when a reviewer began and ended a review pass for a specific statement.
+- Provide the MVP transaction/concurrency boundary for a human decision.
 - Provide provenance for review history.
 
 Non-purpose:
 
 - It is not an assignment.
-- It is not an exclusive lock.
 - It is not a workflow step.
 - It does not imply approval authority beyond the authenticated `reviewer` role.
+
+MVP active-session boundary:
+
+- One `BusinessStatement` can have at most one active `ReviewSession`.
+- Active means `status="active"`.
+- Starting a second active session for the same statement returns HTTP `409`.
+- A completed, cancelled, or expired session is no longer active and does not block a later session.
+- The session is a lightweight domain lease for consistency, not an assignment workflow.
 
 Core fields:
 
@@ -93,6 +100,7 @@ Core fields:
 |---|---|---:|---|---|---|
 | `id` | `String(36)` | no | primary key | PK | stable session identity |
 | `project_id` | `String(36)` | no | FK projects | index | review scope |
+| `statement_id` | `String(36)` | no | FK business_statements | partial unique active index | statement under review |
 | `reviewer_user_id` | `String(36)` | no | FK users | index | human reviewer |
 | `status` | `String(24)` | no | `active`, `completed`, `cancelled`, `expired` | index | session lifecycle |
 | `started_at` | `DateTime` | no | UTC | index | start time |
@@ -100,6 +108,11 @@ Core fields:
 | `review_context_default` | `String(24)` | yes | `technical`, `business`, `combined`, `manual` | none | default context for decisions |
 | `queue_filter_json` | `JSON` | no | server-canonical JSON | none | queue view used by reviewer |
 | `created_at` | `DateTime` | no | UTC | none | immutable creation time |
+
+Uniqueness:
+
+- Partial unique `(project_id, statement_id) WHERE status = 'active'`.
+- Application service must enforce the same rule before insert to return a clear HTTP `409`.
 
 ### `ReviewRecord`
 
@@ -109,7 +122,7 @@ Purpose:
 
 - Capture reviewer, time, context, decision, reason, evidence snapshot, attachments, confidence, comment, analysis job, statement, and session.
 - Provide immutable review history.
-- Tie a human decision to a statement state outcome.
+- Tie a human decision to the statement being reviewed.
 
 Rules:
 
@@ -118,6 +131,8 @@ Rules:
 - A correction creates a new `ReviewRecord`.
 - A reviewer command creates a `ReviewRecord`; the review service may update only the statement status as a derived outcome in the same transaction.
 - Review never updates statement text, structured expression, scope, original evidence, chunks, artifacts, or analyzer provenance.
+- A `ReviewRecord` never references another `ReviewRecord`.
+- Review history is not a linked list. All review records for a statement point directly to the same `statement_id`.
 
 Core fields:
 
@@ -127,7 +142,7 @@ Core fields:
 | `project_id` | `String(36)` | no | FK projects | index | project scope |
 | `statement_id` | `String(36)` | no | FK business_statements | index | reviewed candidate/statement |
 | `analysis_job_id` | `String(36)` | no | FK analysis_jobs | index | original analysis run provenance |
-| `review_session_id` | `String(36)` | yes | FK review_sessions | index | grouped review pass |
+| `review_session_id` | `String(36)` | no | FK review_sessions | index | active session that authorized the decision |
 | `reviewer_user_id` | `String(36)` | no | FK users | index | human reviewer |
 | `reviewer_role` | `String(32)` | no | must include `reviewer` at decision time | none | role snapshot |
 | `review_context` | `String(24)` | no | `technical`, `business`, `combined`, `manual` | index | contextual fact boundary |
@@ -135,17 +150,19 @@ Core fields:
 | `comment` | `Text` | yes | reviewer rationale, not a thread | none | review rationale |
 | `confidence` | `Numeric(5,4)` | yes | 0.0000 to 1.0000 | none | reviewer confidence under context |
 | `confidence_source_json` | `JSON` | no | array of allowlisted strings | none | source of reviewer confidence |
-| `request_fingerprint` | `String(64)` | no | SHA-256 hex of canonical decision command | unique per reviewer command | idempotency for duplicate submits |
+| `request_fingerprint` | `String(64)` | no | SHA-256 hex of canonical decision command within session | unique per reviewer session command | idempotency for duplicate submits |
 
 Uniqueness:
 
-- Unique `(project_id, reviewer_user_id, request_fingerprint)`.
+- Unique `(project_id, reviewer_user_id, review_session_id, request_fingerprint)`.
 
 Idempotency:
 
-- Repeating the same decision request from the same reviewer returns the existing `ReviewRecord`.
+- Repeating the same decision request from the same reviewer in the same review session returns the existing `ReviewRecord`.
 - A materially different decision creates a new `ReviewRecord`.
+- A new session can create a new `ReviewRecord` even when the reviewer makes the same decision again.
 - Idempotency must not become upsert/merge of existing review history.
+- Idempotency must not create `previous_review_record_id`, `supersedes_review_record_id`, parent pointers, or linked-list review chains.
 
 ### `ReviewDecision`
 
@@ -158,14 +175,15 @@ Allowed `decision_type` values:
 - `NEEDS_MORE_EVIDENCE`
 - `DUPLICATE`
 - `OUT_OF_SCOPE`
-- `OBSOLETE`
 - `UNABLE_TO_DECIDE`
 
 Rules:
 
 - Decision is immutable.
 - Decision always has a reason.
-- Decision records previous and next statement status.
+- Decision does not represent a lifecycle state.
+- `OBSOLETE` is not a review decision; obsolete lifecycle handling belongs to Revision Lineage in Epic 4.4.
+- Decision does not persist previous status, next status, or review outcome.
 - Decision confidence is not truth.
 - A decision cannot modify candidate content or original evidence.
 
@@ -176,11 +194,8 @@ Core fields:
 | `id` | `String(36)` | no | primary key | PK | stable decision |
 | `review_record_id` | `String(36)` | no | FK review_records | unique | one decision per record |
 | `decision_type` | `String(32)` | no | enum allowlist | index | reviewer intent |
-| `previous_statement_status` | `String(32)` | no | status before transaction | none | before state |
-| `next_statement_status` | `String(32)` | no | derived by state policy | index | after state |
-| `outcome_code` | `String(32)` | no | enum allowlist | index | normalized outcome |
 | `reason_code` | `String(64)` | no | server allowlist | index | structured reason |
-| `reason_text` | `Text` | yes | reviewer detail | none | human rationale |
+| `reason_detail` | `Text` | yes | reviewer detail | none | human rationale |
 | `created_at` | `DateTime` | no | UTC | none | immutable decision time |
 
 ### `ReviewReason`
@@ -190,22 +205,23 @@ Domain value object for why a decision was made.
 MVP representation:
 
 - Server allowlisted `reason_code`.
-- Optional reviewer `reason_text`.
+- Optional reviewer `reason_detail`.
 
 Examples:
 
-- `matches_source_behavior`
-- `missing_evidence`
-- `source_contradicts_statement`
-- `business_scope_mismatch`
-- `duplicate_candidate`
-- `obsolete_but_historic`
-- `insufficient_context`
+- `BUSINESS_CONFIRMATION`
+- `INSUFFICIENT_EVIDENCE`
+- `SOURCE_CONTRADICTS_STATEMENT`
+- `BUSINESS_SCOPE_MISMATCH`
+- `DUPLICATE_PATTERN`
+- `LEGACY_CODE_DEAD`
+- `INSUFFICIENT_CONTEXT`
 
 Rules:
 
 - `reason_code` is required for every decision.
-- `reason_text` is optional but recommended for rejection, obsolete, duplicate, and unable-to-decide outcomes.
+- `reason_detail` is optional but recommended for reject, duplicate, out-of-scope, and unable-to-decide outcomes.
+- `reason_detail` must not replace `reason_code`; dashboards and metrics must aggregate by `reason_code`.
 - Custom reason catalogs, glossary links, and approval policies are out of scope.
 
 ### `ReviewContext`
@@ -258,6 +274,7 @@ Core fields:
 Constraints:
 
 - At least one `ReviewEvidenceSnapshot` is required when `decision_type=VERIFY`.
+- `analysis_job_id` is required and copied from the reviewed candidate/evidence provenance.
 - Snapshot line ranges must be within artifact bounds.
 - Snapshot `artifact_sha256` must equal the artifact hash known at review time.
 - Snapshot `excerpt_sha256` is calculated from the stored `excerpt_text`.
@@ -265,9 +282,9 @@ Constraints:
 
 ### `ReviewOutcome`
 
-Domain value object for the result of a decision.
+Derived read-model concept for the result of a decision.
 
-Fields:
+Derived fields:
 
 - `previous_statement_status`
 - `next_statement_status`
@@ -280,8 +297,10 @@ Fields:
 Rules:
 
 - Outcome is derived by server state policy, not by client input.
-- Client cannot choose `next_statement_status`.
-- Outcome is stored in `ReviewDecision`.
+- Client cannot choose derived `next_statement_status`.
+- Outcome is not persisted as its own table, column, or `ReviewDecision` field.
+- Outcome is computed from current `BusinessStatement.status`, the latest immutable `ReviewRecord`, and deterministic review state policy.
+- Persisting outcome separately is forbidden in Epic 4.1 because it creates synchronization risk.
 - Outcome does not mean ground truth.
 
 ### `ReviewAttachment`
@@ -403,10 +422,10 @@ Allowed Epic 4.1 transitions:
 | `NEEDS_MORE_EVIDENCE` | `candidate` | `candidate` | optional | Creates `ReviewFlag`; no false certainty. |
 | `UNABLE_TO_DECIDE` | `candidate` | `candidate` | optional | Creates `ReviewFlag`; no false certainty. |
 | `DUPLICATE` | `candidate` | `candidate` | optional | Creates `ReviewConflictMarker`; no merge or supersede in Epic 4.1. |
-| `OBSOLETE` | `verified` | `obsolete` | yes, at least one | Only verified statements can become obsolete. |
 
 Reserved transitions for later Epic 4.4 revision lineage:
 
+- `verified -> obsolete`
 - `verified -> superseded`
 - `obsolete -> superseded`
 - `rejected -> superseded`, only if Architect approves rejected-candidate lineage use cases
@@ -423,7 +442,7 @@ State semantics:
 - `candidate`: produced by extractor or later candidate creation flow; not human-verified.
 - `verified`: reviewed and accepted under context; not ground truth.
 - `rejected`: reviewed and not accepted; preserved for history.
-- `obsolete`: was previously verified, then reviewed as no longer current or no longer applicable; preserved as historic knowledge.
+- `obsolete`: later Epic 4.4 lifecycle state for previously verified knowledge no longer current or no longer applicable; not set by Epic 4.1.
 - `superseded`: replaced by later revision/lineage; not set by Epic 4.1 implementation.
 
 Concurrency:
@@ -431,7 +450,9 @@ Concurrency:
 - Create decision must lock the target statement row or use an equivalent optimistic precondition.
 - Client submits the status observed by the UI.
 - If current status differs from the submitted expected status, return HTTP `409` and create no review record.
-- Multiple review sessions may view the same queue; decision-time state policy prevents inconsistent status changes.
+- Exactly one active `ReviewSession` is allowed per statement.
+- Starting a second active session for the same statement returns HTTP `409`.
+- Decision creation requires the caller's active session for the target statement.
 
 ## 6. Review Decision Rules
 
@@ -478,14 +499,6 @@ Concurrency:
 - Preserves review history and evidence snapshot if provided.
 - Audits `STATEMENT_REJECTED`.
 
-`OBSOLETE`:
-
-- Requires `reviewer` role.
-- Requires previous status `verified`.
-- Requires evidence snapshot or attachment supporting why the accepted statement is no longer current.
-- Changes `verified -> obsolete`.
-- Audits `STATEMENT_OBSOLETE`.
-
 `UNABLE_TO_DECIDE`:
 
 - Requires `reviewer` role.
@@ -505,7 +518,7 @@ Snapshot creation:
 2. Verify each referenced artifact still matches stored SHA-256 before snapshot.
 3. Copy artifact ID, artifact SHA-256, chunk ID, line range, excerpt, evidence type, relation type, extraction method, analyzer version, and analysis job ID into `ReviewEvidenceSnapshot`.
 4. Calculate `excerpt_sha256` from copied excerpt text.
-5. Insert snapshots in the same transaction as the review record, decision, audit, and status outcome.
+5. Insert snapshots in the same transaction as the review record, decision, audit, and derived statement status change.
 
 Snapshot immutability:
 
@@ -531,7 +544,7 @@ Each `ReviewRecord` must be traceable to:
 - Immutable copied evidence snapshot.
 - Reviewer user.
 - Reviewer role snapshot.
-- Review session when present.
+- Review session.
 - Audit event.
 
 Each candidate, evidence, gap, and unresolved question remains traceable to its Phase 3 `analysis_job_id`. Review adds new provenance; it does not rewrite Phase 3 provenance.
@@ -551,7 +564,7 @@ All state-changing endpoints require:
 
 ### Start Review Session
 
-`POST /api/v1/projects/{project_id}/review-sessions`
+`POST /api/v1/projects/{project_id}/statements/{statement_id}/review-sessions`
 
 Request:
 
@@ -571,8 +584,9 @@ Response: `201` with `ReviewSession`.
 Errors:
 
 - `403` if user lacks reviewer role.
-- `404` if project is missing.
+- `404` if project or statement is missing.
 - `409` if project is archived.
+- `409` if the statement already has an active review session.
 
 ### Finish Review Session
 
@@ -592,6 +606,7 @@ Rules:
 
 - `completed` or `cancelled` only.
 - No review records are modified.
+- Finishing the session releases the active-session boundary for the statement.
 - Audits `REVIEW_COMPLETED` or `REVIEW_CANCELLED`.
 
 ### Create Review Decision
@@ -602,12 +617,12 @@ Request:
 
 ```json
 {
-  "review_session_id": "optional-session-id",
+  "review_session_id": "active-session-id",
   "expected_statement_status": "candidate",
   "decision_type": "VERIFY",
   "review_context": "combined",
-  "reason_code": "matches_source_behavior",
-  "reason_text": "Validated against source and SME note.",
+  "reason_code": "BUSINESS_CONFIRMATION",
+  "reason_detail": "Validated against source and SME note.",
   "confidence": 0.86,
   "confidence_source": ["source_code", "sme_interview"],
   "evidence_ids": ["evidence-id-1"],
@@ -626,12 +641,11 @@ Errors:
 - `400` for invalid decision/configuration.
 - `403` for insufficient role.
 - `404` for missing statement/evidence.
-- `409` for stale expected status or invalid state transition.
+- `409` for missing caller-owned active session, stale expected status, or invalid state transition.
 
 Server-owned fields:
 
-- `next_statement_status`.
-- `outcome_code`.
+- Derived review outcome read model.
 - Audit payload.
 - Snapshot content.
 - `request_fingerprint`.
@@ -766,7 +780,7 @@ History must show:
 - Context.
 - Decision.
 - Reason.
-- Previous/next status.
+- Derived previous/next status.
 - Evidence snapshots.
 - Attachments metadata.
 - Flags and conflict markers.
@@ -783,12 +797,15 @@ Required events:
 | `REVIEW_COMPLETED` | Session finished or non-state-changing decision recorded | project_id, review_session_id, reviewer_user_id, decision summary when applicable |
 | `STATEMENT_VERIFIED` | `VERIFY` changes `candidate -> verified` | project_id, statement_id, review_record_id, reviewer_user_id, evidence_snapshot_count |
 | `STATEMENT_REJECTED` | `REJECT` or `OUT_OF_SCOPE` changes `candidate -> rejected` | project_id, statement_id, review_record_id, reviewer_user_id, reason_code |
-| `STATEMENT_OBSOLETE` | `OBSOLETE` changes `verified -> obsolete` | project_id, statement_id, review_record_id, reviewer_user_id, reason_code |
 | `REVIEW_CANCELLED` | Review session cancelled | project_id, review_session_id, reviewer_user_id |
+
+Reserved for Epic 4.4:
+
+- `STATEMENT_OBSOLETE` is not emitted by Epic 4.1 because `OBSOLETE` is not a review decision. Revision Lineage owns obsolete lifecycle transition and audit semantics.
 
 Audit rules:
 
-- Audit write is atomic with review decision and status outcome.
+- Audit write is atomic with review decision and derived statement status change.
 - Audit payload must not include full source files.
 - Audit payload may include short excerpts only through review snapshot IDs, not copied source bodies.
 - Failure before commit creates no partial review history.
@@ -824,16 +841,17 @@ Create review decision transaction:
 3. Load project, statement, analysis job, selected evidence, session.
 4. Check statement belongs to project.
 5. Check `statement.analysis_job_id` matches the candidate provenance.
-6. Lock statement row or validate optimistic status precondition.
-7. Validate decision-specific state transition.
-8. Verify required evidence and artifact hash.
-9. Insert `ReviewRecord`.
-10. Insert `ReviewDecision`.
-11. Insert `ReviewEvidenceSnapshot` rows.
-12. Insert `ReviewAttachment`, `ReviewFlag`, and `ReviewConflictMarker` rows when applicable.
-13. Update only `BusinessStatement.status` when the derived outcome changes status.
-14. Insert audit event.
-15. Commit.
+6. Check the caller owns an active `ReviewSession` for this statement.
+7. Lock statement row or validate optimistic status precondition.
+8. Validate decision-specific state transition.
+9. Verify required evidence and artifact hash.
+10. Insert `ReviewRecord`.
+11. Insert `ReviewDecision`.
+12. Insert `ReviewEvidenceSnapshot` rows.
+13. Insert `ReviewAttachment`, `ReviewFlag`, and `ReviewConflictMarker` rows when applicable.
+14. Update only `BusinessStatement.status` when deterministic review policy derives a status change.
+15. Insert audit event.
+16. Commit.
 
 Rollback rules:
 
@@ -846,6 +864,8 @@ Rollback rules:
 Concurrency rules:
 
 - Stale UI submissions return `409`.
+- Starting a second active session for the same statement returns `409`.
+- Creating a decision without the caller's active session for the statement returns `409`.
 - Idempotent duplicate submit by the same reviewer returns existing record.
 - Concurrent conflicting decisions create at most one status-changing record; the losing transaction receives `409`.
 
@@ -866,12 +886,18 @@ Future Epic 4.1 implementation migration should add, at minimum:
 Expected constraints:
 
 - FK from all review tables to `projects`.
+- FK from `review_sessions.statement_id` to `business_statements`.
+- Partial unique active-session constraint `(project_id, statement_id) WHERE status = 'active'`.
 - FK from `review_records.statement_id` to `business_statements`.
 - FK from `review_records.analysis_job_id` to `analysis_jobs`.
+- FK from `review_records.review_session_id` to `review_sessions`, non-null.
 - FK from `review_records.reviewer_user_id` to `users`.
 - Unique one-to-one `review_decisions.review_record_id`.
-- Unique idempotency key `(project_id, reviewer_user_id, request_fingerprint)`.
-- Check constraints for decision enums, context enums, confidence range, status transitions where DB-portable.
+- Unique idempotency key `(project_id, reviewer_user_id, review_session_id, request_fingerprint)`.
+- Check constraints for decision enums, context enums, confidence range, and status transitions where DB-portable.
+- Decision enum excludes `OBSOLETE`.
+- No persisted `review_outcomes` table and no outcome columns on `review_decisions`.
+- No self-referential FK from `review_records` to `review_records`.
 - Snapshot line range check `start_line <= end_line`.
 - Attachment storage path unique when present.
 - Related statement same-project validation in application service; DB composite FK may be used if supported cleanly.
@@ -890,10 +916,11 @@ Unit:
 
 - Decision state policy.
 - Review context validation.
-- Reason code validation.
+- Reason code and reason detail validation.
 - `verified` is contextual fact, not truth terminology in domain labels.
 - Request fingerprint canonicalization.
 - Evidence snapshot payload creation.
+- Derived `ReviewOutcome` read model calculation without persisted outcome fields.
 
 Integration:
 
@@ -903,12 +930,16 @@ Integration:
 - `OUT_OF_SCOPE` creates rejected review record.
 - `NEEDS_MORE_EVIDENCE` leaves candidate status and creates flag.
 - `DUPLICATE` creates conflict marker and does not merge.
-- `OBSOLETE` only works from `verified`.
+- `OBSOLETE` decision type is rejected.
+- `verified -> obsolete` cannot be triggered by Epic 4.1 review decision.
 - `candidate -> obsolete` returns `409`.
 - Rejected statement is not deleted.
 - Review history is append-only.
+- Review records for a statement do not reference each other.
 - Idempotent duplicate review submit returns existing record.
 - Concurrent conflicting decision returns one success and one `409`.
+- Starting a second active review session for a statement returns `409`.
+- After a session finishes, a new session can be started for the same statement.
 
 Migration:
 
@@ -917,6 +948,9 @@ Migration:
 - FK constraints.
 - Enum/check constraints.
 - Unique idempotency constraint.
+- Partial unique active session per statement constraint.
+- No self-referential review record FK.
+- No persisted review outcome columns/table.
 - Snapshot line range constraint.
 
 RBAC/Security:
@@ -932,6 +966,7 @@ Immutable review:
 
 - `ReviewRecord` cannot be updated through API.
 - `ReviewDecision` cannot be updated through API.
+- `ReviewRecord` cannot reference another `ReviewRecord`.
 - Evidence snapshots are not recomputed after source evidence changes in tests.
 - History cannot be deleted.
 
@@ -941,6 +976,7 @@ State transition:
 - Forbidden transitions fail.
 - Stale expected status returns `409`.
 - Status update, review record, decision, snapshot, and audit are atomic.
+- Review decision requires the caller's active review session for the statement.
 
 Evidence snapshot:
 
@@ -954,8 +990,8 @@ Audit:
 - `REVIEW_COMPLETED`.
 - `STATEMENT_VERIFIED`.
 - `STATEMENT_REJECTED`.
-- `STATEMENT_OBSOLETE`.
 - `REVIEW_CANCELLED`.
+- `STATEMENT_OBSOLETE` is not emitted in Epic 4.1.
 
 E2E:
 
@@ -969,6 +1005,9 @@ Design acceptance:
 - Contract distinguishes human validation from approval workflow.
 - Contract locks `Review != Truth`.
 - Contract preserves evidence and history immutability.
+- Contract locks one active `ReviewSession` per `BusinessStatement`.
+- Contract removes `OBSOLETE` from review decisions and defers obsolete lifecycle state to Epic 4.4.
+- Contract defines `ReviewOutcome` as derived, not persisted.
 - Contract defines allowed and forbidden statement transitions.
 - Contract defines API and UI surfaces without implementing them.
 - Contract defines test matrix for implementation.
@@ -992,13 +1031,18 @@ New Epic 4.1 invariants:
 5. Review does not edit original evidence.
 6. `ReviewRecord` is append-only.
 7. `ReviewDecision` is immutable.
-8. Verified does not mean ground truth.
-9. Verified means reviewed and accepted under a specific context, by a specific reviewer, at a specific time, using a specific evidence snapshot.
-10. Review does not delete history.
-11. Rejected, obsolete, and superseded statements remain visible in history.
-12. Review does not merge, auto-normalize, or pick conflict winners.
-13. Review cannot create verified knowledge without source-backed evidence snapshot.
-14. Review must preserve Phase 3 analysis provenance instead of rewriting it.
+8. `ReviewDecision` does not include `OBSOLETE`.
+9. `ReviewOutcome` is derived and not persisted.
+10. One `BusinessStatement` can have at most one active `ReviewSession`.
+11. A `ReviewRecord` never references another `ReviewRecord`.
+12. Review history is append-only by `statement_id`, not a linked list.
+13. Verified does not mean ground truth.
+14. Verified means reviewed and accepted under a specific context, by a specific reviewer, at a specific time, using a specific evidence snapshot.
+15. Review does not delete history.
+16. Rejected, obsolete, and superseded statements remain visible in history.
+17. Review does not merge, auto-normalize, or pick conflict winners.
+18. Review cannot create verified knowledge without source-backed evidence snapshot.
+19. Review must preserve Phase 3 analysis provenance instead of rewriting it.
 
 Existing invariants affected:
 
@@ -1011,12 +1055,9 @@ Existing invariants affected:
 
 ## 18. Open Questions Or Contradictions
 
-1. Phase 0 CLAR-010 previously said not to add `obsolete` status in MVP. Epic 4.1 Architect prompt now requires `obsolete` and `superseded` in the statement state model. This contract treats the Epic 4.1 prompt as the newer decision and updates assumptions accordingly, while still preserving historically valid statements.
-2. `DUPLICATE` decision creates a marker in Epic 4.1, but actual supersede/merge lineage is deferred to Epic 4.4. Architect should confirm this boundary.
-3. `NEEDS_MORE_EVIDENCE` creates a review flag in Epic 4.1. Whether it should also create or link an `AnalysisGap`/`UnresolvedQuestion` is deferred unless Architect requires it now.
-4. Attachment binary storage can be implemented using Phase 2 storage rules or deferred as metadata-only. Architect should confirm implementation depth before coding Epic 4.1.
-5. Review sessions are non-exclusive in this contract. If exclusive human work queues are desired, that belongs to a later assignment/workflow feature and not Epic 4.1.
-6. Confidence scale is numeric 0.0000 to 1.0000 here. Architect should confirm whether reviewer confidence is needed in MVP UI or stored as nullable for later.
-7. `OUT_OF_SCOPE` maps to `rejected` status with structured reason. Architect should confirm no separate status is needed.
-8. Dedicated audit events for `NEEDS_MORE_EVIDENCE`, `DUPLICATE`, and `UNABLE_TO_DECIDE` are not listed in the prompt. This contract uses review record/history plus `REVIEW_COMPLETED` payload for non-state-changing decisions unless Epic 4.5 adds dedicated events.
-
+1. `DUPLICATE` decision creates a marker in Epic 4.1, but actual supersede/merge lineage is deferred to Epic 4.4. Architect should confirm this boundary remains sufficient.
+2. `NEEDS_MORE_EVIDENCE` creates a review flag in Epic 4.1. Whether it should also create or link an `AnalysisGap`/`UnresolvedQuestion` is deferred unless Architect requires it now.
+3. Attachment binary storage can be implemented using Phase 2 storage rules or deferred as metadata-only. Architect should confirm implementation depth before coding Epic 4.1.
+4. Confidence scale is numeric 0.0000 to 1.0000 here. Architect should confirm whether reviewer confidence is needed in MVP UI or stored as nullable for later.
+5. `OUT_OF_SCOPE` maps to `rejected` status with structured reason. Architect should confirm no separate status is needed.
+6. Dedicated audit events for `NEEDS_MORE_EVIDENCE`, `DUPLICATE`, and `UNABLE_TO_DECIDE` are not listed in the prompt. This contract uses review record/history plus `REVIEW_COMPLETED` payload for non-state-changing decisions unless Epic 4.5 adds dedicated events.

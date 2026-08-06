@@ -2,7 +2,7 @@
 
 Date: 2026-08-06
 Phase: Phase 2 - Secure Source Ingestion
-Status: PASS candidate for gate review
+Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending
 
 ## Scope Verified
 
@@ -22,6 +22,13 @@ Implemented and tested:
 - Project state restoration to the previous stable state on failed/rejected ingestion.
 - Audit events for upload accepted, ingestion completed, and ingestion failed/cancelled.
 - Ingestion path does not execute uploaded source content.
+- Bounded chunk reads stop when `MAX_UPLOAD_BYTES` is exceeded.
+- Oversized upload rejection creates no artifact, restores project status, and writes failure audit.
+- Filesystem/persistence failure handling cleans partial files and writes best-effort failure audit in a new transaction when the database is available.
+- Source viewer verifies artifact SHA-256 before decoding and audits tampering.
+- Legacy Japanese encodings `cp932` and `shift_jis` are checked before Western fallback encodings.
+- Latin-1 fallback creates an `encoding_low_confidence` warning.
+- Architectural security test checks ingestion code does not import/call dynamic execution paths.
 - Docker Compose artifact volume for local immutable artifact storage.
 
 ## Commands Run
@@ -52,7 +59,7 @@ Migration and Compose verification:
 
 ## Results
 
-- Python unit/integration tests: `23 passed`
+- Python unit/integration tests: `30 passed`
 - Frontend TypeScript/Vite production build: passed
 - Playwright E2E: `2 passed`
   - Phase 1 mandatory flow: login -> create project -> project appears in list.
@@ -68,7 +75,7 @@ Migration and Compose verification:
 
 - `TC-01`: covered by `test_tc01_zip_path_traversal_is_blocked_without_artifacts`.
 - `TC-11` Phase 2 artifact portion: covered by `test_tc01_text_upload_persists_immutable_inventory_and_escaped_viewer`.
-- `TC-15` ingestion portion: covered by `test_unsupported_and_binary_entries_return_warnings_without_execution`.
+- `TC-15` ingestion portion: covered by `test_unsupported_and_binary_entries_return_warnings_without_execution` and `test_ingestion_module_has_no_dynamic_execution_paths`.
 
 Additional Phase 2 security coverage:
 
@@ -76,9 +83,15 @@ Additional Phase 2 security coverage:
 - ZIP entry count, path length, total uncompressed size: `test_tc11_entry_count_path_length_and_uncompressed_limits_are_enforced`.
 - Source viewer escaping: backend integration test plus Playwright source viewer test.
 - Storage isolation: backend integration test asserts stored file is under the artifact root and storage path does not contain the original filename.
+- Oversized upload: `test_oversized_upload_is_rejected_with_restore_and_failure_audit`.
+- Bounded read stop behavior: `test_bounded_upload_reader_stops_after_limit_without_consuming_remaining_chunks`.
+- Filesystem failure audit/cleanup: `test_filesystem_failure_cleans_partial_artifact_restores_status_and_audits`.
+- Tampered artifact integrity: `test_tampered_artifact_is_rejected_and_audited`.
+- Legacy Japanese encoding: `test_cp932_source_upload_records_legacy_japanese_encoding`.
+- Latin-1 low-confidence fallback: `test_latin1_fallback_creates_low_confidence_encoding_warning`.
 
 ## Limitations
 
 - Evidence records do not exist until later phases, so `TC-11` evidence/export usage remains deferred to Phase 4/7.
-- Upload progress indicators are not implemented; uploads are currently request/response with a disabled submit button while pending.
+- The default MVP upload limit is 20 MB. `MAX_UPLOAD_BYTES` remains environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP by Product Owner decision on 2026-08-06.
 - Artifact retention/cleanup policy remains a Phase 7 or post-MVP decision.

@@ -2,6 +2,8 @@
 
 Phase 2 secure source ingestion for the Business Forensics Platform MVP.
 
+Current gate status: Phase 2 revision is ready for gate review; Product Owner locked the 20 MB MVP default upload limit and deferred 100 MB/progress to Phase 7 or post-MVP.
+
 ## Stack
 
 - Python 3.12
@@ -77,6 +79,8 @@ npm run test:e2e
 ```
 
 The suite covers the Phase 1 mandatory flow and the Phase 2 upload -> inventory -> escaped source viewer flow.
+
+The default MVP upload limit is `20 MB`. `MAX_UPLOAD_BYTES` is environment-configurable; 100 MB upload support and progress UI are formally deferred to Phase 7 or post-MVP.
 
 ## Implemented Scope
 

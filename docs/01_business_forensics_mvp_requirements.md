@@ -942,7 +942,8 @@ Output deterministic cũng là candidate và ghi `extraction_method=static`.
 
 - Danh sách 10.000 statement vẫn phân trang được.
 - Mở source file dưới 2 MB trong dưới 2 giây ở môi trường local.
-- Upload 100 MB có progress.
+- Giới hạn upload mặc định của MVP là 20 MB, có thể tăng bằng cấu hình môi trường.
+- Upload 100 MB có progress được defer sang Phase 7 hoặc post-MVP theo quyết định Product Owner ngày 2026-08-06.
 - Analysis job chạy bất đồng bộ.
 
 ## Reliability

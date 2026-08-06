@@ -1,8 +1,8 @@
 # Project Progress
 
 Date: 2026-08-06
-Current phase: Phase 2 - Secure Source Ingestion
-Status: Phase 2 revision complete; Product Owner upload-size/progress decision locked; gate review pending
+Current phase: Phase 3 - Static Extraction
+Status: Phase 3 implemented; awaiting Architect implementation gate review
 
 ## Phase 0
 
@@ -83,7 +83,97 @@ Implemented:
 
 No Phase 3 extraction, candidate generation, evidence model, review workflow, AI adapter, behavioral tests, or export implementation was added.
 
+Phase 2 gate and merge:
+
+- Architect gate review: APPROVED.
+- PR #1 merged into `main`.
+- Merge commit: `ead94f7a15956b7185a4fa66f8e83cb973a22be1`.
+
+## Phase 3 Design Summary
+
+Created design-only contract:
+
+- `docs/implementation_contract/phase3_static_extraction_contract.md`
+
+The contract defines:
+
+- Phase objective and out-of-scope boundaries.
+- Requirement traceability for REQ-011, REQ-012, REQ-013, REQ-017, REQ-018, REQ-019, REQ-033, REQ-035, REQ-036, and REQ-040.
+- Domain model and schema contract for `SourceChunk`, `AnalyzerVersion`, `AnalysisJob`, candidate `BusinessStatement`, `Evidence`, `AnalysisGap`, and `UnresolvedQuestion`.
+- Project, artifact, and job state model for static analysis.
+- Chunking, deterministic static extractor patterns, candidate rules, evidence rules, idempotency, API, UI, security, transaction/failure, migration, test matrix, and DoD.
+
+Revision required by design review has been applied in documentation:
+
+- Retry/idempotency now uses `request_fingerprint` shared across retries plus per-attempt `attempt_no`.
+- MVP now allows only one active analysis job per project.
+- Client no longer submits analyzer identity; server owns analyzer name, version, pattern set hash, supported configuration, and canonical config hash.
+- Analysis failure/cancel transition is locked as `analyzing -> previous_project_status`, defaulting to `ready_for_analysis`, with audit `ANALYSIS_FAILED_OR_CANCELLED`.
+- Evidence target integrity requires a DB exactly-one-target check.
+- Candidate, evidence, gap, and question provenance includes `analysis_job_id` and `created_by_kind`.
+- `source_artifacts.candidate_count` remains a transactionally maintained cache; `business_statements.evidence_count` is not persisted in Phase 3.
+- Candidate identity is provenance-based and does not primarily depend on natural-language statement text.
+
+Phase 3 design gate:
+
+- Architect verdict: `CLOSED_PASS_DESIGN`.
+- Implementation authorized on branch `phase-3-static-extraction`.
+
+## Phase 3 Implementation Summary
+
+Implemented:
+
+- Alembic migration `0003_phase3_static_extraction`.
+- SQLAlchemy models for `AnalyzerVersion`, `AnalysisJob`, `AnalysisJobArtifact`, `SourceChunk`, `BusinessStatement`, `Evidence`, `AnalysisGap`, and `UnresolvedQuestion`.
+- Deterministic chunking with source line ranges and chunk hashes.
+- Server-owned analyzer identity: `static-cobol-mvp` version `0.1.0`.
+- Canonical allowlisted configuration and configuration hashing.
+- Static extraction patterns for IF/ELSE, EVALUATE/WHEN, assignment, SQL, procedure/program calls, status literals, numeric thresholds, date logic, role/user checks, and comment-adjacent logic.
+- Analysis job API:
+  - create job;
+  - retry failed/cancelled job;
+  - list/get jobs;
+  - list/get candidate statements;
+  - list statement evidence;
+  - list analysis gaps and unresolved questions.
+- Idempotency and retry:
+  - `request_fingerprint` reused across retry attempts;
+  - per-attempt `attempt_no`;
+  - succeeded request fingerprint returns the existing job;
+  - active project job returns HTTP `409`;
+  - failed/cancelled job can create the next attempt.
+- MVP concurrency guard: one active analysis job per project.
+- Project state transitions:
+  - `ready_for_analysis -> analyzing -> review_in_progress`;
+  - failure restores `AnalysisJob.previous_project_status`.
+- Audit events for `ANALYSIS_STARTED`, `ANALYSIS_COMPLETED`, and `ANALYSIS_FAILED_OR_CANCELLED`.
+- Evidence exactly-one-target DB check constraint.
+- Candidate/evidence/gap/question provenance through `analysis_job_id`.
+- Insert-only static extractor invariant:
+  - no candidate update;
+  - no candidate upsert;
+  - no candidate merge;
+  - no lineage mutation before Phase 4.
+- Candidate queue UI with job status, candidate list, evidence list, and highlighted source line navigation.
+- Dramatiq actor shell entrypoint for static analysis job processing, sharing the API analysis service.
+- Phase 3 Playwright E2E for upload -> run analysis -> candidate -> evidence source highlight.
+
+No Phase 4 review workflow, AI adapter, behavioral tests, dashboard, or export implementation was added.
+
 ## Commands Run
+
+Phase 3 implementation:
+
+- `pytest`
+- `npm run web:build`
+- `npm run test:e2e`
+- `$env:DATABASE_URL='sqlite:///./test-tmp/phase3-migration.sqlite'; .\.venv\Scripts\python.exe -m alembic upgrade head`
+- `$env:DEV_SEED_PASSWORD='<local-temporary>'; docker compose up -d --build`
+- `$env:DATABASE_URL='postgresql+psycopg://bfp:bfp_dev_password@127.0.0.1:55432/bfp'; .\.venv\Scripts\python.exe -m alembic upgrade head`
+- `$env:DATABASE_URL='postgresql+psycopg://bfp:bfp_dev_password@127.0.0.1:55432/bfp'; .\.venv\Scripts\python.exe -m alembic current`
+- `Invoke-RestMethod -Uri http://127.0.0.1:8000/api/v1/health`
+- `Invoke-WebRequest -Uri http://127.0.0.1:5173 -UseBasicParsing`
+- `npm audit --omit=dev`
 
 Setup and dependency installation:
 
@@ -115,15 +205,15 @@ Verification:
 
 ## Test Result
 
-Detailed test evidence is recorded in `docs/phase1_test_report.md` and `docs/phase2_test_report.md`.
+Detailed test evidence is recorded in `docs/phase1_test_report.md`, `docs/phase2_test_report.md`, and `docs/phase3_test_report.md`.
 
 Summary:
 
-- Python unit/integration tests: `30 passed`
+- Python unit/integration tests: `43 passed`
 - Frontend TypeScript/Vite build: passed
-- Playwright E2E: `2 passed`
-- Alembic SQLite migration: passed through `0002_phase2_source_ingestion`
-- Alembic PostgreSQL migration through Compose: `0002_phase2_source_ingestion (head)`
+- Playwright E2E: `3 passed`
+- Alembic SQLite migration: passed through `0003_phase3_static_extraction`
+- Alembic PostgreSQL migration through Compose: `0003_phase3_static_extraction (head)`
 - Docker Compose full stack build/start: passed
 - API health from Compose stack: `{"status":"ok","database":"ok","worker":null}`
 - Web root from Compose stack: HTTP `200`
@@ -156,27 +246,40 @@ Phase 2 implemented or partially implemented:
 - REQ-037 upload-size enforcement subset; MVP default is 20 MB, the limit remains environment-configurable, and 100 MB + progress is formally deferred to Phase 7 or post-MVP.
 - REQ-040 third vertical-slice step: upload one source file.
 
+Phase 3 implemented:
+
+- REQ-011 static extraction.
+- REQ-012 deterministic patterns.
+- REQ-013 async/idempotent analysis jobs.
+- REQ-017 candidate schema and queue.
+- REQ-018 evidence-required candidate rule plus gap/question fallback.
+- REQ-019 Phase 3 evidence schema and evidence navigation.
+- REQ-033 uncertainty objects through `AnalysisGap` and `UnresolvedQuestion`.
+- REQ-040 vertical slice through candidate/evidence.
+
 ## Known Limitations
 
 - Redis host port is `6380` to avoid an existing local port `6379` collision; API/worker still use internal Compose host `redis:6379`.
 - PostgreSQL host port is `55432` to avoid an existing local port `5432` collision; Compose services still use `db:5432`.
 - Full review workflow endpoint is only an RBAC-protected Phase 1 stub; implementation starts in Phase 4.
-- Extraction, evidence persistence, AI adapter, behavioral tests, dashboard, and export remain later phases.
+- Review workflow, AI adapter, behavioral tests, dashboard, and export remain later phases.
 - The default MVP upload limit is 20 MB. `MAX_UPLOAD_BYTES` remains environment-configurable; upload 100 MB plus progress UI is deferred to Phase 7 or post-MVP by Product Owner decision on 2026-08-06.
-- Evidence/export usage of artifact hashes remains deferred until evidence and export models exist.
+- Export usage of artifact hashes remains deferred until export models exist.
 - `npm install` reports development-tool advisories, but `npm audit --omit=dev` reports zero production vulnerabilities.
 
 ## Open Assumptions
 
 Open assumptions remain in `docs/assumptions.md`.
 
-Phase 2 blocking assumptions: none after the Product Owner decision on `Upload 100 MB có progress`; Phase 2 still requires gate review before any `CLOSED_PASS` decision.
+Phase 3 implementation blocking assumptions:
+
+- None known after implementation. Phase 4 remains blocked until Architect reviews Phase 3 implementation.
 
 ## Next Phase
 
-Phase 3 - Static extraction, blocked until Phase 2 gate review:
+Phase 4 review workflow, blocked until Phase 3 implementation gate review:
 
-- Source chunking and deterministic static extractor.
-- Analyzer versioning and idempotency by artifact hash plus analyzer version.
-- Candidate, gap/question, and evidence persistence.
-- Candidate queue UI.
+- Human review decisions.
+- Reviewer verification gate.
+- Candidate revision/lineage.
+- Review audit history.

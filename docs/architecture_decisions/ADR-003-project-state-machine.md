@@ -1,7 +1,7 @@
 # ADR-003: Project State Machine
 
 Date: 2026-08-06
-Status: Accepted for Phase 1 implementation
+Status: Accepted; revised through Phase 3
 
 ## Context
 
@@ -33,10 +33,11 @@ Allowed transitions:
 | `accept_source_upload` | `export_ready` | `ingesting` | `admin`, `analyst` | `SOURCE_UPLOAD_ACCEPTED` | Additional source upload accepted. | None | Current readiness is revoked; prior exports remain immutable snapshots. |
 | `fail_or_cancel_ingestion` | `ingesting` | previous stable state or `draft` | `system`, `admin` | `INGESTION_FAILED_OR_CANCELLED` | Ingestion fails or is cancelled. | Return to recorded previous stable state; default to `draft`. | None |
 | `complete_ingestion` | `ingesting` | `ready_for_analysis` | `system` | `INGESTION_COMPLETED` | Source inventory is persisted. | None | None |
-| `start_analysis` | `ready_for_analysis` | `analyzing` | `analyst`, `system` | `ANALYSIS_STARTED` | Analysis job created for at least one artifact. | None | None |
-| `start_analysis` | `review_in_progress` | `analyzing` | `analyst`, `system` | `ANALYSIS_STARTED` | Re-analysis requested for new source, analyzer version, or explicit reason. | None | Current review coverage is stale. |
-| `start_analysis` | `export_ready` | `analyzing` | `analyst`, `system` | `ANALYSIS_STARTED` | Re-analysis requested without new upload. | None | Current readiness is revoked. |
+| `start_analysis` | `ready_for_analysis` | `analyzing` | `admin`, `analyst`, `system` | `ANALYSIS_STARTED` | Analysis job created for at least one artifact. | None | None |
+| `start_analysis` | `review_in_progress` | `analyzing` | `admin`, `analyst`, `system` | `ANALYSIS_STARTED` | Re-analysis requested for new source, analyzer version, or explicit reason. | None | Current review coverage is stale. |
+| `start_analysis` | `export_ready` | `analyzing` | `admin`, `analyst`, `system` | `ANALYSIS_STARTED` | Re-analysis requested without new upload. | None | Current readiness is revoked. |
 | `complete_analysis` | `analyzing` | `review_in_progress` | `system` | `ANALYSIS_COMPLETED` | Candidates, gaps, or an empty result are persisted. | None | None |
+| `fail_or_cancel_analysis` | `analyzing` | previous stable state or `ready_for_analysis` | `system`, `admin` | `ANALYSIS_FAILED_OR_CANCELLED` | Analysis job fails or is cancelled. | Return to recorded `AnalysisJob.previous_project_status`; default to `ready_for_analysis`. | None |
 | `pass_export_readiness` | `review_in_progress` | `export_ready` | `reviewer`, `admin` | `EXPORT_READINESS_PASSED` | Readiness validation passes. | None | Project may export a new snapshot. |
 | `archive_project` | any non-`archived` state | `archived` | `admin` | `PROJECT_ARCHIVED` | Non-empty archive reason supplied. | None | Archived project is read-only; prior exports remain immutable. |
 
@@ -60,6 +61,7 @@ Tradeoffs:
 
 - Some future recovery flows, such as unarchive, require a new ADR or explicit revision.
 - Ingestion failure recovery needs the previous stable state to be stored when Phase 2 implements upload.
+- Analysis failure recovery needs `AnalysisJob.previous_project_status`, locked in Phase 3.
 
 ## Enforcement
 
@@ -71,3 +73,8 @@ Phase 1 implements and tests:
 - Archive is irreversible and archived projects are read-only.
 - Domain transition tests cover allowed and forbidden transitions.
 
+Phase 3 implements and tests:
+
+- `admin` and `analyst` may start analysis.
+- `fail_or_cancel_analysis` restores `analyzing` to the recorded previous stable state.
+- Analysis failure writes `ANALYSIS_FAILED_OR_CANCELLED`.

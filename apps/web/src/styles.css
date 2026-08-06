@@ -180,6 +180,7 @@ input:focus {
 .project-form,
 .project-list,
 .source-panel,
+.analysis-panel,
 .source-viewer {
   background: #ffffff;
   border: 1px solid #d8e0e7;
@@ -189,6 +190,8 @@ input:focus {
 
 .project-list ul,
 .artifact-list,
+.candidate-list,
+.evidence-list,
 .warning-list {
   list-style: none;
   padding: 0;
@@ -202,7 +205,9 @@ input:focus {
 }
 
 .project-row,
-.artifact-row {
+.artifact-row,
+.candidate-row,
+.evidence-row {
   width: 100%;
   display: flex;
   justify-content: space-between;
@@ -219,8 +224,11 @@ input:focus {
 
 .project-row:hover,
 .artifact-row:hover,
+.candidate-row:hover,
+.evidence-row:hover,
 .project-row.is-selected,
-.artifact-row.is-selected {
+.artifact-row.is-selected,
+.candidate-row.is-selected {
   border-color: #8db4ca;
   background: #f2f8fb;
   color: #1c2430;
@@ -229,18 +237,26 @@ input:focus {
 .project-list strong,
 .project-list span,
 .artifact-list strong,
-.artifact-list span {
+.artifact-list span,
+.candidate-list strong,
+.candidate-list span,
+.evidence-list strong,
+.evidence-list span {
   display: block;
 }
 
 .project-list small,
-.artifact-list small {
+.artifact-list small,
+.candidate-list small,
+.evidence-list small {
   color: #64748b;
   font-size: 14px;
   font-weight: 500;
 }
 
-.artifact-row > span:last-child {
+.artifact-row > span:last-child,
+.candidate-row > span:last-child,
+.evidence-row > span:last-child {
   color: #526170;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 13px;
@@ -261,9 +277,63 @@ input:focus {
 }
 
 .source-panel,
+.analysis-panel,
 .source-viewer {
   display: grid;
   gap: 18px;
+}
+
+.analysis-toolbar,
+.candidate-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.job-chip {
+  border: 1px solid #cfd9e2;
+  background: #f6f8fb;
+  color: #526170;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.candidate-list,
+.evidence-list {
+  margin-top: 0;
+}
+
+.candidate-row,
+.evidence-row {
+  min-height: 58px;
+}
+
+.candidate-row strong,
+.evidence-row strong {
+  overflow-wrap: anywhere;
+}
+
+.evidence-panel {
+  border-top: 1px solid #e3e8ee;
+  padding-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.evidence-panel p {
+  margin: 6px 0 0;
+  color: #334155;
+  line-height: 1.5;
 }
 
 .upload-row {
@@ -332,6 +402,10 @@ input:focus {
   min-height: 20px;
 }
 
+.code-line.is-highlighted {
+  background: #2d432e;
+}
+
 .line-number {
   color: #8aa0b4;
   padding: 0 12px;
@@ -361,20 +435,30 @@ input:focus {
 
   .upload-row,
   .inventory-heading,
+  .analysis-toolbar,
+  .candidate-heading,
   .viewer-meta {
     grid-template-columns: 1fr;
   }
 
   .upload-row,
   .inventory-heading,
+  .analysis-toolbar,
+  .candidate-heading,
   .viewer-meta,
   .project-row,
-  .artifact-row {
+  .artifact-row,
+  .candidate-row,
+  .evidence-row {
     align-items: stretch;
   }
 
   .project-row,
   .artifact-row,
+  .candidate-row,
+  .evidence-row,
+  .analysis-toolbar,
+  .candidate-heading,
   .inventory-heading,
   .viewer-meta {
     flex-direction: column;

@@ -1,6 +1,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { Archive, Eye, FileText, FileUp, LogOut, Plus, ShieldCheck } from 'lucide-react';
+import {
+  Activity,
+  Archive,
+  Eye,
+  FileText,
+  FileUp,
+  ListChecks,
+  LogOut,
+  Play,
+  Plus,
+  ShieldCheck
+} from 'lucide-react';
 import './styles.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000/api/v1';
@@ -71,6 +82,63 @@ type SourceContentResponse = {
   lines: SourceContentLine[];
 };
 
+type AnalysisJob = {
+  id: string;
+  project_id: string;
+  analyzer_name: string;
+  analyzer_version: string;
+  pattern_set_hash: string;
+  configuration_hash: string;
+  configuration: Record<string, unknown>;
+  status: string;
+  request_fingerprint: string;
+  requested_by: string;
+  requested_artifact_count: number;
+  attempt_no: number;
+  retry_of_job_id: string | null;
+  previous_project_status: string;
+  failure_code: string | null;
+  failure_message: string | null;
+  candidate_count: number;
+  gap_count: number;
+  question_count: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
+};
+
+type BusinessStatement = {
+  id: string;
+  project_id: string;
+  analysis_job_id: string;
+  type: string;
+  pattern_id: string;
+  title: string;
+  statement_text: string;
+  structured_expression_json: Record<string, unknown> | null;
+  scope_json: Record<string, unknown>;
+  confidence: number;
+  status: string;
+  extraction_method: string;
+  primary_artifact_id: string;
+  primary_chunk_id: string;
+  evidence_count: number;
+  created_at: string;
+};
+
+type Evidence = {
+  id: string;
+  artifact_id: string;
+  artifact_sha256: string;
+  source_chunk_id: string;
+  start_line: number;
+  end_line: number;
+  excerpt: string;
+  relation_type: string;
+  pattern_id: string;
+};
+
 type AuthSession = {
   user: User;
   csrf_token: string;
@@ -112,6 +180,10 @@ function formatStatus(status: string) {
   return status.replace(/_/g, ' ');
 }
 
+function formatConfidence(confidence: number) {
+  return `${Math.round(confidence * 100)}%`;
+}
+
 function App() {
   const [auth, setAuth] = React.useState<AuthSession | null>(null);
   const [email, setEmail] = React.useState('admin@example.com');
@@ -124,13 +196,26 @@ function App() {
   const [selectedArtifactId, setSelectedArtifactId] = React.useState<string | null>(null);
   const [sourceLines, setSourceLines] = React.useState<SourceContentLine[]>([]);
   const [uploadWarnings, setUploadWarnings] = React.useState<IngestionWarning[]>([]);
+  const [analysisJobs, setAnalysisJobs] = React.useState<AnalysisJob[]>([]);
+  const [candidates, setCandidates] = React.useState<BusinessStatement[]>([]);
+  const [selectedStatementId, setSelectedStatementId] = React.useState<string | null>(null);
+  const [statementEvidence, setStatementEvidence] = React.useState<Evidence[]>([]);
+  const [highlightRange, setHighlightRange] = React.useState<{
+    artifact_id: string;
+    start_line: number;
+    end_line: number;
+  } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isInventoryLoading, setIsInventoryLoading] = React.useState(false);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+  const [isCandidatesLoading, setIsCandidatesLoading] = React.useState(false);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedArtifact = artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? null;
+  const selectedStatement = candidates.find((candidate) => candidate.id === selectedStatementId) ?? null;
+  const latestJob = analysisJobs[0] ?? null;
 
   React.useEffect(() => {
     apiFetch<AuthSession>('/auth/me')
@@ -153,20 +238,56 @@ function App() {
       setArtifacts([]);
       setSelectedArtifactId(null);
       setSourceLines([]);
+      setAnalysisJobs([]);
+      setCandidates([]);
+      setSelectedStatementId(null);
+      setStatementEvidence([]);
+      setHighlightRange(null);
       return;
     }
 
     setIsInventoryLoading(true);
+    setIsCandidatesLoading(true);
     setUploadWarnings([]);
     apiFetch<SourceArtifact[]>(`/projects/${selectedProjectId}/artifacts`)
       .then((data) => {
         setArtifacts(data);
         setSelectedArtifactId((current) => (current && data.some((row) => row.id === current) ? current : null));
         setSourceLines([]);
+        setHighlightRange(null);
       })
       .catch((caught) => setError(caught.message))
       .finally(() => setIsInventoryLoading(false));
+    refreshAnalysis(selectedProjectId).finally(() => setIsCandidatesLoading(false));
   }, [auth, selectedProjectId]);
+
+  async function refreshProjects(selectedId = selectedProjectId) {
+    const data = await apiFetch<Project[]>('/projects');
+    setProjects(data);
+    if (selectedId && data.some((project) => project.id === selectedId)) {
+      setSelectedProjectId(selectedId);
+    } else {
+      setSelectedProjectId(data[0]?.id ?? null);
+    }
+  }
+
+  async function refreshAnalysis(projectId = selectedProjectId) {
+    if (!projectId) {
+      setAnalysisJobs([]);
+      setCandidates([]);
+      return;
+    }
+    const [jobs, rows] = await Promise.all([
+      apiFetch<AnalysisJob[]>(`/projects/${projectId}/analysis-jobs`),
+      apiFetch<BusinessStatement[]>(`/projects/${projectId}/statements?status=candidate`)
+    ]);
+    setAnalysisJobs(jobs);
+    setCandidates(rows);
+    setSelectedStatementId((current) => (current && rows.some((row) => row.id === current) ? current : null));
+    if (!rows.some((row) => row.id === selectedStatementId)) {
+      setStatementEvidence([]);
+    }
+  }
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -214,6 +335,11 @@ function App() {
     setSelectedArtifactId(null);
     setSourceLines([]);
     setUploadWarnings([]);
+    setAnalysisJobs([]);
+    setCandidates([]);
+    setSelectedStatementId(null);
+    setStatementEvidence([]);
+    setHighlightRange(null);
     setProjectName('');
     setLegacySystemName('');
   }
@@ -249,12 +375,17 @@ function App() {
       if (result.artifacts[0]) {
         await handleSelectArtifact(result.artifacts[0]);
       }
+      await refreshProjects(result.project.id);
+      await refreshAnalysis(result.project.id);
     } finally {
       setIsUploading(false);
     }
   }
 
-  async function handleSelectArtifact(artifact: SourceArtifact) {
+  async function handleSelectArtifact(
+    artifact: SourceArtifact,
+    range?: { start_line: number; end_line: number }
+  ) {
     if (!selectedProject) {
       return;
     }
@@ -264,6 +395,74 @@ function App() {
       `/projects/${selectedProject.id}/artifacts/${artifact.id}/content`
     );
     setSourceLines(content.lines);
+    setHighlightRange(range ? { artifact_id: artifact.id, ...range } : null);
+  }
+
+  async function handleRunAnalysis() {
+    if (!auth || !selectedProject) {
+      return;
+    }
+    setError(null);
+    setIsAnalyzing(true);
+    try {
+      const job = await apiFetch<AnalysisJob>(
+        `/projects/${selectedProject.id}/analysis-jobs`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            artifact_ids: [],
+            configuration: {
+              chunk_max_lines: 120,
+              chunk_overlap_lines: 20
+            }
+          })
+        },
+        auth.csrf_token
+      );
+      await waitForAnalysisJob(selectedProject.id, job.id);
+      await refreshProjects(selectedProject.id);
+      await refreshAnalysis(selectedProject.id);
+      const refreshedArtifacts = await apiFetch<SourceArtifact[]>(`/projects/${selectedProject.id}/artifacts`);
+      setArtifacts(refreshedArtifacts);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function waitForAnalysisJob(projectId: string, jobId: string) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const job = await apiFetch<AnalysisJob>(`/projects/${projectId}/analysis-jobs/${jobId}`);
+      setAnalysisJobs((current) => [job, ...current.filter((row) => row.id !== job.id)]);
+      if (!['queued', 'running'].includes(job.status)) {
+        return;
+      }
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 350);
+      });
+    }
+  }
+
+  async function handleSelectCandidate(statement: BusinessStatement) {
+    if (!selectedProject) {
+      return;
+    }
+    setError(null);
+    setSelectedStatementId(statement.id);
+    const evidenceRows = await apiFetch<Evidence[]>(
+      `/projects/${selectedProject.id}/statements/${statement.id}/evidence`
+    );
+    setStatementEvidence(evidenceRows);
+    const firstEvidence = evidenceRows[0];
+    if (!firstEvidence) {
+      return;
+    }
+    const artifact = artifacts.find((row) => row.id === firstEvidence.artifact_id);
+    if (artifact) {
+      await handleSelectArtifact(artifact, {
+        start_line: firstEvidence.start_line,
+        end_line: firstEvidence.end_line
+      });
+    }
   }
 
   async function handleLogout() {
@@ -278,6 +477,11 @@ function App() {
     setSelectedArtifactId(null);
     setSourceLines([]);
     setUploadWarnings([]);
+    setAnalysisJobs([]);
+    setCandidates([]);
+    setSelectedStatementId(null);
+    setStatementEvidence([]);
+    setHighlightRange(null);
   }
 
   if (isLoading) {
@@ -331,7 +535,7 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <span className="eyebrow">Secure ingestion</span>
+          <span className="eyebrow">Business Forensics</span>
           <h1>Projects</h1>
         </div>
         <div className="session-tools">
@@ -482,6 +686,112 @@ function App() {
             )}
           </section>
 
+          <section className="analysis-panel" aria-label="Static extraction">
+            <div className="section-heading">
+              <Activity aria-hidden="true" size={18} />
+              <h2>Static extraction</h2>
+            </div>
+            {selectedProject ? (
+              <>
+                <div className="analysis-toolbar">
+                  <button
+                    className="action-button"
+                    type="button"
+                    disabled={isAnalyzing || artifacts.length === 0 || selectedProject.status === 'analyzing'}
+                    onClick={() => {
+                      handleRunAnalysis().catch((caught) => setError(caught.message));
+                    }}
+                  >
+                    <Play aria-hidden="true" size={17} />
+                    <span>{isAnalyzing ? 'Analyzing' : 'Run static analysis'}</span>
+                  </button>
+                  <span className="job-chip">
+                    {latestJob ? `${formatStatus(latestJob.status)} · ${latestJob.candidate_count} candidates` : 'No jobs'}
+                  </span>
+                </div>
+
+                <div className="candidate-heading">
+                  <div className="section-heading">
+                    <ListChecks aria-hidden="true" size={18} />
+                    <h2>Candidate queue</h2>
+                  </div>
+                  <span>{candidates.length} candidates</span>
+                </div>
+                {isCandidatesLoading ? (
+                  <p className="empty-state">Loading candidates...</p>
+                ) : candidates.length === 0 ? (
+                  <p className="empty-state">No candidates yet.</p>
+                ) : (
+                  <ul className="candidate-list">
+                    {candidates.map((candidate) => (
+                      <li key={candidate.id}>
+                        <button
+                          className={`candidate-row ${candidate.id === selectedStatementId ? 'is-selected' : ''}`}
+                          type="button"
+                          onClick={() => {
+                            handleSelectCandidate(candidate).catch((caught) => setError(caught.message));
+                          }}
+                        >
+                          <span>
+                            <strong>{candidate.title}</strong>
+                            <small>
+                              {formatStatus(candidate.type)} · {candidate.pattern_id} ·{' '}
+                              {formatConfidence(candidate.confidence)}
+                            </small>
+                          </span>
+                          <span>{candidate.evidence_count} ev</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {selectedStatement ? (
+                  <div className="evidence-panel">
+                    <div>
+                      <strong>{selectedStatement.title}</strong>
+                      <p>{selectedStatement.statement_text}</p>
+                    </div>
+                    {statementEvidence.length > 0 ? (
+                      <ul className="evidence-list">
+                        {statementEvidence.map((evidence) => {
+                          const artifact = artifacts.find((row) => row.id === evidence.artifact_id);
+                          return (
+                            <li key={evidence.id}>
+                              <button
+                                className="evidence-row"
+                                type="button"
+                                onClick={() => {
+                                  if (!artifact) {
+                                    return;
+                                  }
+                                  handleSelectArtifact(artifact, {
+                                    start_line: evidence.start_line,
+                                    end_line: evidence.end_line
+                                  }).catch((caught) => setError(caught.message));
+                                }}
+                              >
+                                <span>
+                                  <strong>{artifact?.original_path ?? evidence.artifact_id.slice(0, 8)}</strong>
+                                  <small>
+                                    lines {evidence.start_line}-{evidence.end_line} · {evidence.relation_type}
+                                  </small>
+                                </span>
+                                <span>{evidence.pattern_id}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="empty-state">No project selected.</p>
+            )}
+          </section>
+
           <section className="source-viewer" aria-label="Source viewer">
             <div className="section-heading">
               <Eye aria-hidden="true" size={18} />
@@ -495,7 +805,17 @@ function App() {
                 </div>
                 <pre className="source-code">
                   {sourceLines.map((line) => (
-                    <span className="code-line" key={line.number}>
+                    <span
+                      className={`code-line ${
+                        highlightRange &&
+                        selectedArtifactId === highlightRange.artifact_id &&
+                        line.number >= highlightRange.start_line &&
+                        line.number <= highlightRange.end_line
+                          ? 'is-highlighted'
+                          : ''
+                      }`}
+                      key={line.number}
+                    >
                       <span className="line-number">{line.number}</span>
                       <span
                         className="line-text"
